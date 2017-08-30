@@ -26,7 +26,7 @@ metadata_parser.add_argument('format', type=str, help='Format: json or csv')
 
 # ---- Helper Functions -------
 def parse_metadata(cell_ids=False):
-    with open("GBM/GBM_metadata.csv") as fi:
+    with open(application.config["GBM_DIR"] + "GBM_metadata.csv") as fi:
         reader = csv.reader(fi)
         metadata = []
         header = next(reader)
@@ -100,7 +100,7 @@ class MetadataAPI(Resource):
         if args.format and args.format.lower() == 'json':
             metadata = parse_metadata()
             return make_payload(metadata)
-        return send_file("GBM/GBM_metadata.csv", mimetype="text/csv")
+        return send_file(application.config["GBM_DIR"] + "GBM_metadata.csv", mimetype="text/csv")
 
     def post(self):
         args = self.parser.parse_args()

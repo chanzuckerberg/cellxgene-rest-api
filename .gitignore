@@ -9,4 +9,6 @@ __pycache__
 !.elasticbeanstalk/*.global.yml
 
 *.cfg
+GBM
+venv
 
