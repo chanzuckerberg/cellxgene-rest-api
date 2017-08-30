@@ -36,6 +36,22 @@ def parse_metadata(cell_ids=False):
             metadata.append({k:v for k,v in zip(header,row)})
     return {"cell_metadata": metadata}
 
+def parse_exp_data(limit=40):
+    with open(application.config["GBM_DIR"] + "GBM_data-noERCC.csv") as fi:
+        reader = csv.reader(fi)
+        data = []
+        header = next(reader)
+        for idx, row in enumerate(reader):
+            if limit and idx == limit:
+                break
+            data.append({
+                "cellname": row[0],
+                "e": [int(i) for i in row[1:]]
+            })
+    return {
+        "genes": header[1:],
+        "cells": data
+    }
 
 def make_payload(data, errormessage=""):
     error = False
@@ -110,8 +126,16 @@ class MetadataAPI(Resource):
             return make_payload([], "Some cell ids not available")
         return make_payload(metadata)
 
+class HeatmapAPI(Resource):
+    # TODO Swagger documentation
+
+    def get(self):
+        data = parse_exp_data()
+        return make_payload(data)
+
 
 api.add_resource(MetadataAPI, "/api/v0.1/metadata")
+api.add_resource(HeatmapAPI, "/api/v0.1/heatmap")
 
 if __name__ == "__main__":
     application.run(debug=True)
