@@ -23,6 +23,10 @@ metadata_parser = reqparse.RequestParser()
 metadata_parser.add_argument('celllist', type=str, action="append", required=False, help='List of cells by id')
 metadata_parser.add_argument('format', type=str, help='Format: json or csv')
 
+expression_parser = reqparse.RequestParser()
+expression_parser.add_argument('celllist', type=str, action="append", required=False, help='List of cells by id')
+expression_parser.add_argument('genelist', type=str, action="append", required=False, help='List of genes by name')
+
 
 # ---- Helper Functions -------
 def parse_metadata(cell_ids=False):
@@ -37,21 +41,38 @@ def parse_metadata(cell_ids=False):
     return {"cell_metadata": metadata}
 
 
-def parse_exp_data(limit=40):
+def parse_exp_data(cells=[], genes=[], limit=0):
     with open(application.config["GBM_DIR"] + "GBM_data-noERCC.csv") as fi:
         reader = csv.reader(fi)
-        data = []
-        header = next(reader)
+        cell_list = next(reader)
+        cell_idxs = []
+        cell_data = {}
+        gene_list = []
+        for idx, el in enumerate(cell_list[1:]):
+            if not cells or \
+                    (cells and el in cells):
+                cell_idxs.append(idx + 1)
+
+        if limit:
+            if cell_idxs and len(cell_idxs) > limit:
+                cell_idxs = cell_idxs[:limit + 1]
+            else:
+                cell_idxs = [i for i in range(1, limit)]
+        for idx in cell_idxs:
+            cell_data[cell_list[idx]] = []
         for idx, row in enumerate(reader):
-            if limit and idx == limit:
-                break
-            data.append({
-                "cellname": row[0],
-                "e": [int(i) for i in row[1:]]
-            })
+            gene = row[0]
+            if not genes or (gene in genes):
+                gene_list.append(gene)
+            else:
+                continue
+
+            for idx in cell_idxs:
+                cell_data[cell_list[idx]].append(int(row[idx]))
+        cell_data = [{"cellname": k, "e": v} for k, v in cell_data.items()]
     return {
-        "genes": header[1:],
-        "cells": data
+        "genes": gene_list,
+        "cells": cell_data
     }
 
 
@@ -112,8 +133,6 @@ def index():
 
 # --- Restful Routes ---------
 class MetadataAPI(Resource):
-    # TODO Swagger documentation
-
     def __init__(self):
         self.parser = metadata_parser
 
@@ -251,13 +270,14 @@ class MetadataAPI(Resource):
         args = self.parser.parse_args()
         cell_list = args.celllist
         metadata = parse_metadata(cell_list)
-        if len(metadata['cell_metadata']) < len(cell_list):
+        if cell_list and len(metadata['cell_metadata']) < len(cell_list):
             return make_payload([], "Some cell ids not available")
         return make_payload(metadata)
 
 
-class HeatmapAPI(Resource):
-    # TODO Swagger documentation
+class ExpressionAPI(Resource):
+    def __init__(self):
+        self.parser = expression_parser
 
     @swagger.doc({
         'description': 'Json with gene list and expression data by cell, limited to first 40 cells',
@@ -272,7 +292,7 @@ class HeatmapAPI(Resource):
                                 {
                                     "cellname": "1/2-SBSRNA4",
                                     "e": [0, 0, 214, 0, 0]
-                                }, 
+                                },
                             ],
                             "genes": [
                                 "1001000173.G8",
@@ -292,12 +312,76 @@ class HeatmapAPI(Resource):
         }
     })
     def get(self):
-        data = parse_exp_data()
+        data = parse_exp_data(limit=40)
+        return make_payload(data)
+
+    @swagger.doc({
+        'description': 'Json with gene list and expression data by cell',
+        'parameters': [
+            {
+                'name': 'celllist',
+                'description': 'list of cellid strings',
+                'in': 'body',
+                'type': 'list of strings',
+                "schema": {
+                    "cellids": []
+                }
+            },
+            {
+                'name': 'genelist',
+                'description': 'list of gene name strings',
+                'in': 'body',
+                'type': 'list of strings',
+                "schema": {
+                    "genelist": []
+                }
+            },
+        ],
+        'responses': {
+            '200': {
+                'description': 'Json for expressiondata',
+                'examples': {
+                    'application/json': {
+                        "data": {
+                            "cells": [
+                                {
+                                    "cellname": "1001000173.D4",
+                                    "e": [0, 0]
+                                },
+                                {
+                                    "cellname": "1001000173.G8",
+                                    "e": [0, 0]
+                                }
+                            ],
+                            "genes": [
+                                "ABCD4",
+                                "ZWINT"
+                            ]
+                        },
+                        "status": {
+                            "error": False,
+                            "errormessage": ""
+                        }
+
+                    }
+                }
+            }
+        }
+    })
+    def post(self):
+        args = self.parser.parse_args()
+        cell_list = args.get('celllist', [])
+        gene_list = args.get('genelist', [])
+        data = parse_exp_data(cell_list, gene_list)
+        if cell_list and len(data['cells']) < len(cell_list):
+            return make_payload([], "Some cell ids not available")
+        if gene_list and len(data['genes']) < len(gene_list):
+            return make_payload([], "Some genes not available")
         return make_payload(data)
 
 
 api.add_resource(MetadataAPI, "/api/v0.1/metadata")
-api.add_resource(HeatmapAPI, "/api/v0.1/heatmap")
+api.add_resource(ExpressionAPI, "/api/v0.1/expression")
 
 if __name__ == "__main__":
     application.run(debug=True)

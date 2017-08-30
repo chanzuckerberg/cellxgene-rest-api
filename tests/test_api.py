@@ -41,10 +41,41 @@ class MetaData(unittest.TestCase):
         assert result_json['status']['error']
 
     def test_heatmap(self):
-        url = "{base}{endpoint}".format(base=self.url_base, endpoint="heatmap")
+        url = "{base}{endpoint}".format(base=self.url_base, endpoint="expression")
         result = self.session.get(url)
         assert result.status_code == 200
         result_json = result.json()
         assert not result_json['status']['error']
         assert len(result_json['data']['genes'])
         assert len(result_json["data"]['cells'])
+        assert len(result_json["data"]['cells'][0]['e'])
+
+    def test_heatmap_post_celllist(self):
+        url = "{base}{endpoint}".format(base=self.url_base, endpoint="expression")
+        result = self.session.post(url,data={"celllist": ["1001000012.C3"]})
+        assert result.status_code == 200
+        result_json = result.json()
+        assert 'data' in result_json
+        assert len(result_json['data']['genes'])
+        assert len(result_json["data"]['cells']) == 1
+        assert len(result_json["data"]['cells'][0]['e'])
+
+    def test_heatmap_post_genelist(self):
+        url = "{base}{endpoint}".format(base=self.url_base, endpoint="expression")
+        result = self.session.post(url,data={"genelist": ["ABCD4"]})
+        assert result.status_code == 200
+        result_json = result.json()
+        assert 'data' in result_json
+        assert len(result_json['data']['genes']) == 1
+        assert len(result_json["data"]['cells'])
+        assert len(result_json["data"]['cells'][0]['e']) == 1
+
+    def test_heatmap_post_celllist(self):
+        url = "{base}{endpoint}".format(base=self.url_base, endpoint="expression")
+        result = self.session.post(url,data={"celllist": ["1001000012.C3"], "genelist": ["ABCD4"]})
+        assert result.status_code == 200
+        result_json = result.json()
+        assert 'data' in result_json
+        assert len(result_json['data']['genes']) == 1
+        assert len(result_json["data"]['cells']) == 1
+        assert len(result_json["data"]['cells'][0]['e']) == 1
