@@ -39,3 +39,12 @@ class MetaData(unittest.TestCase):
         assert result.status_code == 200
         result_json = result.json()
         assert result_json['status']['error']
+
+    def test_heatmap(self):
+        url = "{base}{endpoint}".format(base=self.url_base, endpoint="heatmap")
+        result = self.session.get(url)
+        assert result.status_code == 200
+        result_json = result.json()
+        assert not result_json['status']['error']
+        assert len(result_json['data']['genes'])
+        assert len(result_json["data"]['cells'])
