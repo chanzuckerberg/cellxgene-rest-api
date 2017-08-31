@@ -7,7 +7,12 @@ class MetaData(unittest.TestCase):
     """Test Case for metadata endpoint"""
 
     def setUp(self):
-        self.url_base = "http://localhost:5000/api/v0.1/"
+		# Local
+		# self.url_base = "http://localhost:5000/api/v0.1/"
+		# Dev
+        self.url_base = "http://ec2-34-228-53-40.compute-1.amazonaws.com/api/v0.1/"
+		# Prod
+        # self.url_base = "http://api.clustering.czi.technology/api/v0.1/"
         self.session = requests.Session()
 
     def test_get(self):
