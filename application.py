@@ -390,8 +390,63 @@ class ExpressionAPI(Resource):
 
 class GraphAPI(Resource):
 	def __init__(self):
-		self.parser = graph_parser 
+		self.parser = graph_parser
 
+	@swagger.doc({
+		'description': 'computes the graph for a named cell set',
+		'parameters': [
+			{
+				'name': 'cellsetname',
+				'description': 'Named cell set',
+				'in': 'query',
+				'type': 'str',
+			},
+			{
+				'name': 'similarpairsname',
+				'description': 'Named setof pairs',
+				'in': 'query',
+				'type': 'str',
+			},
+			{
+				'name': 'similaritythreshold',
+				'description': 'Threshold between 0-1',
+				'in': 'query',
+				'type': 'float',
+			},
+			{
+				'name': 'connectivity',
+				'description': 'Maximum connectivity',
+				'in': 'query',
+				'type': 'int',
+			}
+		],
+		'responses': {
+			'200': {
+				'description': 'xy points for cell graph',
+				'examples': {
+					'application/json': {
+						"data": [
+							[
+								"1001000173.G8",
+								0.93836,
+								0.28623
+							],
+							[
+								"1001000173.D4",
+								0.1662,
+								0.79438
+							]
+						],
+						"status": {
+							"error": False,
+							"errormessage": ""
+						}
+
+					}
+				}
+			}
+		}
+	})
 	def get(self):
 		args = self.parser.parse_args()
 		os.chdir(application.config['SCRATCH_DIR'])
