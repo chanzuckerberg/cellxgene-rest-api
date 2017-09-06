@@ -381,6 +381,8 @@ class ExpressionAPI(Resource):
 		args = self.parser.parse_args()
 		cell_list = args.get('celllist', [])
 		gene_list = args.get('genelist', [])
+		if not(cell_list) and not(gene_list):
+			return make_payload([], "must include either celllist and/or genelist parameter")
 		data = parse_exp_data(cell_list, gene_list)
 		if cell_list and len(data['cells']) < len(cell_list):
 			return make_payload([], "Some cell ids not available")
