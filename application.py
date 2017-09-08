@@ -1,5 +1,7 @@
 import csv, sys, os
 
+import time
+
 from functools import wraps
 from flask import Flask, jsonify, redirect, url_for, send_file, request
 from flask_restful import reqparse
@@ -39,6 +41,7 @@ expression_parser.add_argument('genelist', type=str, action="append", required=F
 
 # ---- Helper Functions -------
 def parse_metadata(cell_ids=False):
+	t0 = time.time()
 	with open(application.config["GBM_DIR"] + "GBM_metadata.csv") as fi:
 		reader = csv.reader(fi)
 		metadata = []
@@ -47,8 +50,19 @@ def parse_metadata(cell_ids=False):
 			if cell_ids and row[0] not in cell_ids:
 				continue
 			metadata.append({k: v for k, v in zip(header, row)})
+	# Use paolo's code if don't need the cell names
+	'''
+	else:
+		print("Paolo, version")
+		metadata = []
+		e = ExpressionMatrix('/data/data')
+		for idx in range(0, e.cellCount()):
+			cellMData = e.getAllCellMetaData(idx)
+			metadata.append({item.first:item.second for item in cellMData})
+	'''
+	t1 = time.time()
+	print("Time:", t1-t0)
 	return {"cell_metadata": metadata}
-
 
 def parse_exp_data(cells=[], genes=[], limit=0):
 	with open(application.config["GBM_DIR"] + "GBM_data-noERCC.csv") as fi:
