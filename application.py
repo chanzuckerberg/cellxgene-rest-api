@@ -3,7 +3,7 @@ import csv, sys, os
 import time
 
 from functools import wraps
-from flask import Flask, jsonify, redirect, url_for, send_file, request
+from flask import Flask, jsonify, redirect, url_for, send_file, request, make_response
 from flask_restful import reqparse
 from flask_restful_swagger_2 import Api, swagger, Resource
 from flask_dance.contrib.google import make_google_blueprint, google
@@ -92,17 +92,17 @@ def parse_exp_data(cells=[], genes=[], limit=0):
 	}
 
 
-def make_payload(data, errormessage=""):
+def make_payload(data, errormessage="", errorcode=200):
 	error = False
 	if errormessage:
 		error = True
-	return jsonify({
+	return make_response(jsonify({
 		"data": data,
 		"status": {
 			"error": error,
 			"errormessage": errormessage,
 		}
-	})
+	}), errorcode)
 
 
 # ---- Decorators -------------
@@ -153,18 +153,23 @@ class MetadataAPI(Resource):
 		self.parser = metadata_parser
 
 	@swagger.doc({
-		'description': 'Returns a either a csv file or a json document containing the metadata for all cells',
+		'summary': 'Returns a either a csv file or a json document containing the metadata for all cells',
 		'parameters': [
 			{
 				'name': 'format',
 				'description': 'format of file',
 				'in': 'query',
-				'type': 'string'
+				'type': 'string',
+				'required': False,
 			}
+		],
+		"produces": [
+			"application/xml",
+			"application/json"
 		],
 		'responses': {
 			'200': {
-				'description': 'A csv file or json file',
+				'description': 'successful operation',
 			}
 		}
 	})
@@ -176,15 +181,15 @@ class MetadataAPI(Resource):
 		return send_file(application.config["GBM_DIR"] + "GBM_metadata.csv", mimetype="text/csv")
 
 	@swagger.doc({
-		'description': 'json document containing the metadata for list of cells',
+		'summary': 'Json document containing the metadata for list of cells',
 		'parameters': [
 			{
-				'name': 'celllist',
-				'description': 'list of cellid strings',
+				'name': 'body',
 				'in': 'body',
-				'type': 'list of strings',
-				"schema": {
-					"cellids": []
+				'schema': {
+					"example": {
+						"celllist": ["1001000173.G8", "1001000173.D4"],
+					}
 				}
 			}
 		],
@@ -287,7 +292,7 @@ class MetadataAPI(Resource):
 		cell_list = args.celllist
 		metadata = parse_metadata(cell_list)
 		if cell_list and len(metadata['cell_metadata']) < len(cell_list):
-			return make_payload([], "Some cell ids not available")
+			return make_payload([], "Some cell ids not available", 400)
 		return make_payload(metadata)
 
 
@@ -296,7 +301,7 @@ class ExpressionAPI(Resource):
 		self.parser = expression_parser
 
 	@swagger.doc({
-		'description': 'Json with gene list and expression data by cell, limited to first 40 cells',
+		'summary': 'Json with gene list and expression data by cell, limited to first 40 cells',
 		'parameters': [],
 		'responses': {
 			'200': {
@@ -332,24 +337,17 @@ class ExpressionAPI(Resource):
 		return make_payload(data)
 
 	@swagger.doc({
-		'description': 'Json with gene list and expression data by cell',
+		'summary': 'Json with gene list and expression data by cell',
 		'parameters': [
 			{
-				'name': 'celllist',
-				'description': 'list of cellid strings',
+				'name': 'body',
 				'in': 'body',
-				'type': 'list of strings',
 				"schema": {
-					"cellids": []
-				}
-			},
-			{
-				'name': 'genelist',
-				'description': 'list of gene name strings',
-				'in': 'body',
-				'type': 'list of strings',
-				"schema": {
-					"genelist": []
+					"example": {
+						"celllist": ["1001000173.G8", "1001000173.D4"],
+						"genelist": ["1/2-SBSRNA4", "A1BG", "A1BG-AS1", "A1CF", "A2LD1", "A2M", "A2ML1", "A2MP1", "A4GALT"]
+					}
+
 				}
 			},
 		],
@@ -389,12 +387,12 @@ class ExpressionAPI(Resource):
 		cell_list = args.get('celllist', [])
 		gene_list = args.get('genelist', [])
 		if not(cell_list) and not(gene_list):
-			return make_payload([], "must include either celllist and/or genelist parameter")
+			return make_payload([], "must include celllist and/or genelist parameter", 400)
 		data = parse_exp_data(cell_list, gene_list)
 		if cell_list and len(data['cells']) < len(cell_list):
-			return make_payload([], "Some cell ids not available")
+			return make_payload([], "Some cell ids not available", 400)
 		if gene_list and len(data['genes']) < len(gene_list):
-			return make_payload([], "Some genes not available")
+			return make_payload([], "Some genes not available", 400)
 		return make_payload(data)
 
 class GraphAPI(Resource):
@@ -402,29 +400,29 @@ class GraphAPI(Resource):
 		self.parser = graph_parser
 
 	@swagger.doc({
-		'description': 'computes the graph for a named cell set',
+		'summary': 'computes the graph for a named cell set',
 		'parameters': [
 			{
 				'name': 'cellsetname',
-				'description': 'Named cell set',
+				'description': 'Named cell set ex. "AllCells"',
 				'in': 'query',
-				'type': 'str',
+				'type': 'string',
 			},
 			{
 				'name': 'similarpairsname',
-				'description': 'Named setof pairs',
+				'description': 'Named set of pairs ex. "ExtractHighInformationGenes"',
 				'in': 'query',
-				'type': 'str',
+				'type': 'string',
 			},
 			{
 				'name': 'similaritythreshold',
-				'description': 'Threshold between 0-1',
+				'description': 'Threshold between 0-1 ex. 0.3',
 				'in': 'query',
 				'type': 'float',
 			},
 			{
 				'name': 'connectivity',
-				'description': 'Maximum connectivity',
+				'description': 'Maximum connectivity ex. 20',
 				'in': 'query',
 				'type': 'int',
 			}
