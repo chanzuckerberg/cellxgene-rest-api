@@ -36,7 +36,7 @@ class MetaData(unittest.TestCase):
         result_json = result.json()
         assert 'data' in result_json
         assert len(result_json['data']['cell_metadata'])
-        assert result_json['data']['cell_metadata'][0]["Cell"] == "1001000012.C3"
+        assert result_json['data']['cell_metadata'][0]["CellName"] == "1001000012.C3"
 
     def test_cell_list_error(self):
         url = "{base}{endpoint}".format(base=self.url_base, endpoint="metadata")

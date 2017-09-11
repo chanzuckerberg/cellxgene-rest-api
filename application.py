@@ -12,6 +12,8 @@ from flask_cors import CORS
 sys.path.insert(0, "/home/ubuntu/ExpressionMatrix2Test")
 from ExpressionMatrix2 import *
 
+BAD_CELL_NAME_ERROR = 4294967295
+
 application = Flask(__name__)
 CORS(application)
 
@@ -41,27 +43,18 @@ expression_parser.add_argument('genelist', type=str, action="append", required=F
 
 # ---- Helper Functions -------
 def parse_metadata(cell_ids=False):
-	t0 = time.time()
-	with open(application.config["GBM_DIR"] + "GBM_metadata.csv") as fi:
-		reader = csv.reader(fi)
-		metadata = []
-		header = next(reader)
-		for row in reader:
-			if cell_ids and row[0] not in cell_ids:
-				continue
-			metadata.append({k: v for k, v in zip(header, row)})
-	# Use paolo's code if don't need the cell names
-	'''
+	e = ExpressionMatrix('/data/data')
+	if cell_ids:
+		cell_number_ids = [e.cellIdFromString(cell_id) for cell_id in cell_ids]
 	else:
-		print("Paolo, version")
-		metadata = []
-		e = ExpressionMatrix('/data/data')
-		for idx in range(0, e.cellCount()):
-			cellMData = e.getAllCellMetaData(idx)
-			metadata.append({item.first:item.second for item in cellMData})
-	'''
-	t1 = time.time()
-	print("Time:", t1-t0)
+		cell_number_ids = e.getCellSet('AllCells')
+	metadata = []
+	#for idx in range(0, e.cellCount()):
+	for cell_id in cell_number_ids:
+		if cell_id == BAD_CELL_NAME_ERROR:
+			continue
+		cellMData = e.getAllCellMetaData(cell_id)
+		metadata.append({item.first:item.second for item in cellMData})
 	return {"cell_metadata": metadata}
 
 def parse_exp_data(cells=[], genes=[], limit=0):
