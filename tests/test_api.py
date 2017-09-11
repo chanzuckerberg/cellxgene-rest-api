@@ -41,7 +41,7 @@ class MetaData(unittest.TestCase):
     def test_cell_list_error(self):
         url = "{base}{endpoint}".format(base=self.url_base, endpoint="metadata")
         result = self.session.post(url, data={"celllist": ["A"]})
-        assert result.status_code == 200
+        assert result.status_code == 400
         result_json = result.json()
         assert result_json['status']['error']
 
@@ -84,3 +84,9 @@ class MetaData(unittest.TestCase):
         assert len(result_json['data']['genes']) == 1
         assert len(result_json["data"]['cells']) == 1
         assert len(result_json["data"]['cells'][0]['e']) == 1
+
+    def test_graph_endpoint(self):
+        url = "{base}{endpoint}?{params}".format(base=self.url_base, endpoint="graph", params="&".join(["cellsetname=AllCells", "similarpairsname=ExactHighInformationGenes", "similaritythreshold=0.3", "connectivity=20"]))
+        print(url)
+        result = self.session.get(url)
+        assert result.status_code == 200
