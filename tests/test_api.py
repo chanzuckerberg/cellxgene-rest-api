@@ -10,7 +10,7 @@ class MetaData(unittest.TestCase):
 		# Local
 		# self.url_base = "http://localhost:5000/api/v0.1/"
 		# Dev
-        self.url_base = "http://ec2-34-228-53-40.compute-1.amazonaws.com/api/v0.1/"
+        self.url_base = "http://api-dev.clustering.czi.technology/api/v0.1/"
 		# Prod
         # self.url_base = "http://api.clustering.czi.technology/api/v0.1/"
         self.session = requests.Session()

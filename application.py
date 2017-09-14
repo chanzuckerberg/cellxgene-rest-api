@@ -42,20 +42,22 @@ expression_parser.add_argument('genelist', type=str, action="append", required=F
 
 
 # ---- Helper Functions -------
+def stringstringpairs2dict(ssp):
+	return {i.first: i.second for i in ssp}
+
 def parse_metadata(cell_ids=False):
 	e = ExpressionMatrix('/data/data')
+	cell_number_ids = CellIdList()
 	if cell_ids:
-		cell_number_ids = [e.cellIdFromString(cell_id) for cell_id in cell_ids]
+		for cell_id in cell_ids:
+			cell_number_ids.append(e.cellIdFromString(cell_id))
 	else:
 		cell_number_ids = e.getCellSet('AllCells')
-	metadata = []
-	#for idx in range(0, e.cellCount()):
-	for cell_id in cell_number_ids:
-		if cell_id == BAD_CELL_NAME_ERROR:
-			continue
-		cellMData = e.getAllCellMetaData(cell_id)
-		metadata.append({item.first:item.second for item in cellMData})
-	return {"cell_metadata": metadata}
+	mdict = []
+	if invalidCellId not in cell_number_ids:
+		metadata = e.getCellsMetaData(cell_number_ids)
+		mdict = [stringstringpairs2dict(m) for m in metadata]
+	return {"cell_metadata": mdict}
 
 def parse_exp_data(cells=[], genes=[], limit=0):
 	with open(application.config["GBM_DIR"] + "GBM_data-noERCC.csv") as fi:
@@ -164,7 +166,7 @@ class MetadataAPI(Resource):
 			}
 		],
 		"produces": [
-			"application/xml",
+			"text/csv",
 			"application/json"
 		],
 		'responses': {
@@ -461,7 +463,7 @@ class GraphAPI(Resource):
 		e.createCellGraph('AllCells', args.cellsetname, args.similarpairsname, args.similaritythreshold, args.connectivity)
 		e.computeCellGraphLayout('AllCells')
 		vertices = e.getCellGraphVertices('AllCells')
-		data = [[e.getCellMetaData(v.cellId, 'CellName'), v.x(), v.y()] for v in vertices]
+		data = [[e.getCellMetaDataValue(v.cellId, 'CellName'), v.x(), v.y()] for v in vertices]
 		return make_payload(data)
 
 
