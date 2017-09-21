@@ -536,7 +536,7 @@ class GraphAPI(Resource):
 class InitializeAPI(Resource):
 
 	def get(self):
-		schema = parse_schema("data/test_data_schema.json")
+		schema = parse_schema(os.path.join(application.config["SCHEMAS_DIR"], "test_data_schema.json"))
 		for s in schema:
 			if schema[s]["variabletype"] ==  "categorical":
 				schema[s]["range"] = []
