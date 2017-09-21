@@ -12,8 +12,6 @@ from flask_cors import CORS
 sys.path.insert(0, "/home/ubuntu/ExpressionMatrix2Test")
 from ExpressionMatrix2 import *
 
-BAD_CELL_NAME_ERROR = 4294967295
-
 application = Flask(__name__)
 CORS(application)
 
@@ -286,6 +284,9 @@ class MetadataAPI(Resource):
 						}
 					}
 				}
+			},
+			'400': {
+				'description': 'Cell ids selected not available',
 			}
 		}
 	})
@@ -381,6 +382,9 @@ class ExpressionAPI(Resource):
 
 					}
 				}
+			},
+			'400': {
+				'description': 'Required parameter missing/incorrect',
 			}
 		}
 	})
