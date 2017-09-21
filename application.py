@@ -9,8 +9,9 @@ from flask_restful_swagger_2 import Api, swagger, Resource
 from flask_dance.contrib.google import make_google_blueprint, google
 from flask_cors import CORS
 
-sys.path.insert(0, "/home/ubuntu/ExpressionMatrix2Test")
-from ExpressionMatrix2 import *
+import json
+from schemaparse import parse_schema
+
 
 BAD_CELL_NAME_ERROR = 4294967295
 
@@ -25,6 +26,9 @@ blueprint = make_google_blueprint(
 	scope=["profile", "email"]
 )
 application.register_blueprint(blueprint, url_prefix="/login")
+
+sys.path.insert(0, application.config["EM2_DIR"])
+from ExpressionMatrix2 import *
 
 graph_parser = reqparse.RequestParser()
 graph_parser.add_argument('cellsetname', type=str, default='AllCells', required=False, help="Named cell set")
@@ -46,7 +50,7 @@ def stringstringpairs2dict(ssp):
 	return {i.first: i.second for i in ssp}
 
 def parse_metadata(cell_ids=False):
-	e = ExpressionMatrix('/data/data')
+	e = ExpressionMatrix(application.config["DATA_DIR"])
 	cell_number_ids = CellIdList()
 	if cell_ids:
 		for cell_id in cell_ids:
@@ -466,10 +470,106 @@ class GraphAPI(Resource):
 		data = [[e.getCellMetaDataValue(v.cellId, 'CellName'), v.x(), v.y()] for v in vertices]
 		return make_payload(data)
 
+# class FilterAPI(Resource):
+#
+# 	def get(self):
+# 		metadata = parse_metadata()['cell_metadata']
+# 		qs = parse_querystrings(request.args)
+# 		print(len(metadata))
+# 		if qs == {}:
+# 			return make_payload(metadata)
+# 		keptcells = []
+# 		error = False
+# 		for key, value in qs.items():
+# 			for cell in metadata:
+# 				try:
+# 					if type(value) == list:
+# 						if cell[key] in value:
+# 							keptcells.append(cell)
+# 					elif type(value) == dict:
+# 						if cell[key] > value['min'] and cell[key] < value['max']:
+# 							keptcells.append(cell)
+# 					else:
+# 						if cell[key] == value:
+# 							keptcells.append(cell)
+# 				except KeyError:
+# 					pass
+# 			metadata = keptcells
+# 		print(len(keptcells))
+# 		if error:
+# 			return make_payload([], "Bad metadata key", 400)
+# 		return make_payload(keptcells)
+#
+#
+# def parse_querystrings(qs):
+# 	parsed_querystring = {}
+#
+# 	for key, value in qs.items():
+# 		print(key,value)
+# 		if key.endswith("[]"):
+# 			key = key[:-2]
+# 		new_val = None
+# 		# is it an int or a float or should it stay a string?
+# 		try:
+# 			new_value = int(value)
+# 		except ValueError:
+# 			try:
+# 				new_value = float(value)
+# 			except ValueError:
+# 				new_value = value
+# 		# if there are lots of them,
+# 		if key in parsed_querystring:
+# 			print("KEY", key)
+# 			if type(parsed_querystring[key]) == list:
+# 				parsed_querystring[key].append(new_value)
+# 			else:
+# 				parsed_querystring[key] = [parsed_querystring[key], new_value]
+# 		else:
+# 			parsed_querystring[key] = new_value
+# 	return parsed_querystring
+#
+
+class InitializeAPI(Resource):
+
+	def get(self):
+		schema = parse_schema("data/test_data_schema.json")
+		for s in schema:
+			if schema[s]["variabletype"] ==  "categorical":
+				schema[s]["range"] = []
+			else:
+				schema[s]["range"] = {
+					"min": None,
+					"max": None
+				}
+		metadata = parse_metadata()["cell_metadata"]
+		for cell in metadata:
+			for s in schema:
+
+				try:
+					datum = cell[s]
+					if schema[s]["type"] == "int":
+						datum = int(datum)
+					elif schema[s]["type"] == "float":
+						datum = float(datum)
+					if schema[s]["variabletype"] == "categorical" and datum not in schema[s]["range"]:
+						schema[s]["range"].append(datum)
+					elif schema[s]["variabletype"] == "continuous":
+						if not schema[s]["range"]["min"] or datum < schema[s]["range"]["min"]:
+							schema[s]["range"]["min"] = datum
+						if not schema[s]["range"]["max"] or datum > schema[s]["range"]["max"]:
+							schema[s]["range"]["max"] = datum
+				except KeyError:
+					pass
+				except TypeError:
+					print(schema[s]["range"])
+		return make_payload({"schema": schema, "cellcount": len(metadata)})
+
 
 api.add_resource(MetadataAPI, "/api/v0.1/metadata")
 api.add_resource(ExpressionAPI, "/api/v0.1/expression")
 api.add_resource(GraphAPI, "/api/v0.1/graph")
+api.add_resource(InitializeAPI, "/api/v0.1/initialize")
+# api.add_resource(FilterAPI, "/api/v0.1/filter")
 
 if __name__ == "__main__":
-	application.run(debug=True)
+	application.run(host='0.0.0.0', debug=True)
