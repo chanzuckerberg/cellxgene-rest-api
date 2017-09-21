@@ -12,7 +12,6 @@ from flask_cors import CORS
 import json
 from schemaparse import parse_schema
 
-
 application = Flask(__name__)
 CORS(application)
 
@@ -30,9 +29,11 @@ from ExpressionMatrix2 import *
 
 graph_parser = reqparse.RequestParser()
 graph_parser.add_argument('cellsetname', type=str, default='AllCells', required=False, help="Named cell set")
-graph_parser.add_argument('similarpairsname', type=str, default='ExactHighInformationGenes', required=False, help="Named setof pairs")
+graph_parser.add_argument('similarpairsname', type=str, default='ExactHighInformationGenes', required=False,
+                          help="Named setof pairs")
 graph_parser.add_argument('similaritythreshold', type=float, required=False, default=0.3, help="Threshold between 0-1")
-graph_parser.add_argument('connectivity', type=int, required=False, default=20, help="Maximum connectivity, default is 20")
+graph_parser.add_argument('connectivity', type=int, required=False, default=20,
+                          help="Maximum connectivity, default is 20")
 
 metadata_parser = reqparse.RequestParser()
 metadata_parser.add_argument('celllist', type=str, action="append", required=False, help='List of cells by id')
@@ -47,6 +48,7 @@ expression_parser.add_argument('genelist', type=str, action="append", required=F
 def stringstringpairs2dict(ssp):
 	return {i.first: i.second for i in ssp}
 
+
 def parse_metadata(cell_ids=False):
 	e = ExpressionMatrix(application.config["DATA_DIR"])
 	cell_number_ids = CellIdList()
@@ -60,6 +62,7 @@ def parse_metadata(cell_ids=False):
 		metadata = e.getCellsMetaData(cell_number_ids)
 		mdict = [stringstringpairs2dict(m) for m in metadata]
 	return {"cell_metadata": mdict}
+
 
 def parse_exp_data(cells=[], genes=[], limit=0):
 	with open(application.config["GBM_DIR"] + "GBM_data-noERCC.csv") as fi:
@@ -352,7 +355,8 @@ class ExpressionAPI(Resource):
 				"schema": {
 					"example": {
 						"celllist": ["1001000173.G8", "1001000173.D4"],
-						"genelist": ["1/2-SBSRNA4", "A1BG", "A1BG-AS1", "A1CF", "A2LD1", "A2M", "A2ML1", "A2MP1", "A4GALT"]
+						"genelist": ["1/2-SBSRNA4", "A1BG", "A1BG-AS1", "A1CF", "A2LD1", "A2M", "A2ML1", "A2MP1",
+						             "A4GALT"]
 					}
 
 				}
@@ -396,7 +400,7 @@ class ExpressionAPI(Resource):
 		args = self.parser.parse_args()
 		cell_list = args.get('celllist', [])
 		gene_list = args.get('genelist', [])
-		if not(cell_list) and not(gene_list):
+		if not (cell_list) and not (gene_list):
 			return make_payload([], "must include celllist and/or genelist parameter", 400)
 		data = parse_exp_data(cell_list, gene_list)
 		if cell_list and len(data['cells']) < len(cell_list):
@@ -404,6 +408,7 @@ class ExpressionAPI(Resource):
 		if gene_list and len(data['genes']) < len(gene_list):
 			return make_payload([], "Some genes not available", 400)
 		return make_payload(data)
+
 
 class GraphAPI(Resource):
 	def __init__(self):
@@ -468,11 +473,13 @@ class GraphAPI(Resource):
 		args = self.parser.parse_args()
 		os.chdir(application.config['SCRATCH_DIR'])
 		e = ExpressionMatrix(application.config['DATA_DIR'])
-		e.createCellGraph('AllCells', args.cellsetname, args.similarpairsname, args.similaritythreshold, args.connectivity)
+		e.createCellGraph('AllCells', args.cellsetname, args.similarpairsname, args.similaritythreshold,
+		                  args.connectivity)
 		e.computeCellGraphLayout('AllCells')
 		vertices = e.getCellGraphVertices('AllCells')
 		data = [[e.getCellMetaDataValue(v.cellId, 'CellName'), v.x(), v.y()] for v in vertices]
 		return make_payload(data)
+
 
 # class FilterAPI(Resource):
 #
@@ -534,11 +541,65 @@ class GraphAPI(Resource):
 #
 
 class InitializeAPI(Resource):
-
+	@swagger.doc({
+		'summary': 'get metadata schema, ranges for values, and cell count to initialize cellxgene app',
+		'parameters': [],
+		'responses': {
+			'200': {
+				'description': 'initialization data for UI',
+				'examples': {
+					'application/json': {
+						"data": {
+							"cellcount": 3589,
+							"schema": {
+								"Location": {
+									"range": [
+										"Tumor",
+										"Periphery",
+										"Distant"
+									],
+									"type": "string",
+									"variabletype": "categorical"
+								},
+								"Multimapping_reads_percent": {
+									"range": {
+										"max": 8.01,
+										"min": 0.09
+									},
+									"type": "float",
+									"variabletype": "continuous"
+								},
+								"Neoplastic": {
+									"range": [
+										"Neoplastic",
+										"Regular"
+									],
+									"type": "string",
+									"variabletype": "categorical"
+								},
+								"Non_ERCC_reads": {
+									"range": {
+										"max": 1540731,
+										"min": 43
+									},
+									"type": "int",
+									"variabletype": "continuous"
+								}
+							}
+						},
+						"status": {
+							"error": False,
+							"errormessage": ""
+						}
+					}
+				}
+			}
+		}
+	})
 	def get(self):
 		schema = parse_schema(os.path.join(application.config["SCHEMAS_DIR"], "test_data_schema.json"))
 		for s in schema:
-			if schema[s]["variabletype"] ==  "categorical":
+			if schema[s]["variabletype"] == "categorical":
 				schema[s]["range"] = []
 			else:
 				schema[s]["range"] = {
@@ -548,7 +609,6 @@ class InitializeAPI(Resource):
 		metadata = parse_metadata()["cell_metadata"]
 		for cell in metadata:
 			for s in schema:
-
 				try:
 					datum = cell[s]
 					if schema[s]["type"] == "int":
