@@ -1,6 +1,5 @@
 import csv, sys, os
-
-import time
+from collections import defaultdict
 
 from functools import wraps
 from flask import Flask, jsonify, redirect, url_for, send_file, request, make_response
@@ -9,11 +8,12 @@ from flask_restful_swagger_2 import Api, swagger, Resource
 from flask_dance.contrib.google import make_google_blueprint, google
 from flask_cors import CORS
 
-import json
 from schemaparse import parse_schema
 
 application = Flask(__name__)
 CORS(application)
+
+REACTIVE_LIMIT = 1000
 
 application.config.from_pyfile('app.cfg', silent=True)
 api = Api(application, api_version='0.1', api_spec_url='/api/swagger')
@@ -25,15 +25,15 @@ blueprint = make_google_blueprint(
 application.register_blueprint(blueprint, url_prefix="/login")
 
 sys.path.insert(0, application.config["EM2_DIR"])
-from ExpressionMatrix2 import *
+from ExpressionMatrix2 import ExpressionMatrix, CellIdList, invalidCellId
 
 graph_parser = reqparse.RequestParser()
 graph_parser.add_argument('cellsetname', type=str, default='AllCells', required=False, help="Named cell set")
 graph_parser.add_argument('similarpairsname', type=str, default='ExactHighInformationGenes', required=False,
-                          help="Named setof pairs")
+						  help="Named setof pairs")
 graph_parser.add_argument('similaritythreshold', type=float, required=False, default=0.3, help="Threshold between 0-1")
 graph_parser.add_argument('connectivity', type=int, required=False, default=20,
-                          help="Maximum connectivity, default is 20")
+						  help="Maximum connectivity, default is 20")
 
 metadata_parser = reqparse.RequestParser()
 metadata_parser.add_argument('celllist', type=str, action="append", required=False, help='List of cells by id')
@@ -356,7 +356,7 @@ class ExpressionAPI(Resource):
 					"example": {
 						"celllist": ["1001000173.G8", "1001000173.D4"],
 						"genelist": ["1/2-SBSRNA4", "A1BG", "A1BG-AS1", "A1CF", "A2LD1", "A2M", "A2ML1", "A2MP1",
-						             "A4GALT"]
+									 "A4GALT"]
 					}
 
 				}
@@ -474,71 +474,127 @@ class GraphAPI(Resource):
 		os.chdir(application.config['SCRATCH_DIR'])
 		e = ExpressionMatrix(application.config['DATA_DIR'])
 		e.createCellGraph('AllCells', args.cellsetname, args.similarpairsname, args.similaritythreshold,
-		                  args.connectivity)
+						  args.connectivity)
 		e.computeCellGraphLayout('AllCells')
 		vertices = e.getCellGraphVertices('AllCells')
 		data = [[e.getCellMetaDataValue(v.cellId, 'CellName'), v.x(), v.y()] for v in vertices]
 		return make_payload(data)
 
 
+def parse_querystring(qs):
+	schema = parse_schema(os.path.join(application.config["SCHEMAS_DIR"], "test_data_schema.json"))
+	query = {}
+	for key in qs:
+		value = None
+		if key.endswith("[]"):
+			value = qs.getlist(key)
+			key = key[:-2]
+		else:
+			value = qs[key]
+		if key not in schema:
+			raise QueryStringError("Error: key {} not in metadata schema".format(key))
+		query[key] = schema[key]
+		if query[key]["variabletype"] == "categorical":
+			query[key]["query"] = convert_variable(query[key]["variabletype"], value)
+		elif query[key]["variabletype"] == "continuous":
+			try:
+				min, max = value.split(",")
+			except ValueError:
+				raise QueryStringError("Error: min,max format required for range for key {}, got {}".format(key, value))
+			if min == "*":
+				min = "-inf"
+			if max == "*":
+				max = "inf"
+			try:
+				query[key]["query"] = {
+					"min": convert_variable(query[key]["type"], min),
+					"max": convert_variable(query[key]["type"], max)
+				}
+			except ValueError:
+				raise QueryStringError(
+					"Error: expected type {} for key {}, got {}".format(query[key]["type"], key, value))
+	return query
+
+
+class QueryStringError(Exception):
+	pass
+
+
+def convert_variable(datatype, variable):
+	try:
+		if datatype == "int":
+			variable = int(variable)
+		elif datatype == "float":
+			variable = float(variable)
+		return variable
+	except ValueError:
+		print("Bad conversion")
+		raise
+
+
 # class FilterAPI(Resource):
-#
+# 	@swagger.doc({
+# 		'summary': 'get metadata schema, ranges for values, and cell count to initialize cellxgene app',
+# 		'parameters': [],
+# 		'responses': {
+# 			'200': {
+# 				'description': 'initialization data for UI',
+# 				'examples': {
+# 					'application/json': {
+# 						"data": {  }
+# 					}
+# 				}
+# 			},
+# 			'400': {
+# 				'description': 'bad query parames',
+# 			}
+# 		}
+# 	})
 # 	def get(self):
-# 		metadata = parse_metadata()['cell_metadata']
-# 		qs = parse_querystrings(request.args)
-# 		print(len(metadata))
-# 		if qs == {}:
-# 			return make_payload(metadata)
-# 		keptcells = []
-# 		error = False
-# 		for key, value in qs.items():
-# 			for cell in metadata:
-# 				try:
-# 					if type(value) == list:
-# 						if cell[key] in value:
-# 							keptcells.append(cell)
-# 					elif type(value) == dict:
-# 						if cell[key] > value['min'] and cell[key] < value['max']:
-# 							keptcells.append(cell)
-# 					else:
-# 						if cell[key] == value:
-# 							keptcells.append(cell)
-# 				except KeyError:
-# 					pass
-# 			metadata = keptcells
-# 		print(len(keptcells))
-# 		if error:
-# 			return make_payload([], "Bad metadata key", 400)
-# 		return make_payload(keptcells)
+# 		# TODO Allow random downsampling
 #
-#
-# def parse_querystrings(qs):
-# 	parsed_querystring = {}
-#
-# 	for key, value in qs.items():
-# 		print(key,value)
-# 		if key.endswith("[]"):
-# 			key = key[:-2]
-# 		new_val = None
-# 		# is it an int or a float or should it stay a string?
+# 		e = ExpressionMatrix(application.config['DATA_DIR'])
+# 		data = {
+# 			"reactive": False,
+# 			"cellids": [],
+# 			"expression": [],
+# 			"metadata": [],
+# 			"cellcount": 0,
+# 			"badmetadatacount": 0,
+# 		}
 # 		try:
-# 			new_value = int(value)
-# 		except ValueError:
-# 			try:
-# 				new_value = float(value)
-# 			except ValueError:
-# 				new_value = value
-# 		# if there are lots of them,
-# 		if key in parsed_querystring:
-# 			print("KEY", key)
-# 			if type(parsed_querystring[key]) == list:
-# 				parsed_querystring[key].append(new_value)
-# 			else:
-# 				parsed_querystring[key] = [parsed_querystring[key], new_value]
-# 		else:
-# 			parsed_querystring[key] = new_value
-# 	return parsed_querystring
-#
+# 			qs = parse_querystring(request.args)
+# 		except QueryStringError as e:
+# 			return make_payload({}, str(e), 400)
+# 		metadata = parse_metadata()['cell_metadata']
+# 		bad_metadata_count = 0
+# 		# TODO Loop though cells only once
+# 		if len(qs):
+# 			error = False
+# 			for key, value in qs.items():
+# 				print(key, value)
+# 				keptcells = []
+# 				for cell in metadata:
+# 					try:
+# 						if value["variabletype"] == 'categorical':
+# 							if cell[key] in value["query"]:
+# 								keptcells.append(cell)
+# 						elif value["variabletype"] == 'continuous':
+# 							numerical_variable = convert_variable(value["type"], cell[key])
+# 							if value["query"]['min'] < numerical_variable < value["query"]['max']:
+# 								keptcells.append(cell)
+# 					except KeyError:
+# 						bad_metadata_count += 1
+# 				metadata = keptcells
+# 		data["cell_count"] = len(metadata)
+# 		if data["cellcount"] <= REACTIVE_LIMIT:
+# 			data["reactive"] = True
+# 			data["metadata"] = metadata
+# 			data["cellids"] = [m["CellName"] for m in metadata]
+# 			data["expression"] = parse_exp_data(data["cellids"])
+# 			data["badmetadatacount"] = bad_metadata_count
+# 		return make_payload(data)
+
 
 class InitializeAPI(Resource):
 	@swagger.doc({
@@ -551,41 +607,63 @@ class InitializeAPI(Resource):
 					'application/json': {
 						"data": {
 							"cellcount": 3589,
+							"options": {
+								"Sample.type": {
+									"options": {
+										"Glioblastoma": 3589
+									}
+								},
+								"Selection": {
+									"options": {
+										"Astrocytes(HEPACAM)": 714,
+										"Endothelial(BSC)": 123,
+										"Microglia(CD45)": 1108,
+										"Neurons(Thy1)": 685,
+										"Oligodendrocytes(GC)": 294,
+										"Unpanned": 665
+									}
+								},
+								"Splice_sites_AT.AC": {
+									"range": {
+										"max": 1025,
+										"min": 152
+									}
+								},
+								"Splice_sites_Annotated": {
+									"range": {
+										"max": 1075869,
+										"min": 26
+									}
+								}
+							},
 							"schema": {
-								"Location": {
-									"range": [
-										"Tumor",
-										"Periphery",
-										"Distant"
-									],
+								"CellName": {
+									"displayname": "Name",
 									"type": "string",
 									"variabletype": "categorical"
 								},
-								"Multimapping_reads_percent": {
-									"range": {
-										"max": 8.01,
-										"min": 0.09
-									},
+								"Class": {
+									"displayname": "Class",
+									"type": "string",
+									"variabletype": "categorical"
+								},
+								"ERCC_reads": {
+									"displayname": "ERCC Reads",
+									"type": "int",
+									"variabletype": "continuous"
+								},
+								"ERCC_to_non_ERCC": {
+									"displayname": "ERCC:Non-ERCC",
 									"type": "float",
 									"variabletype": "continuous"
 								},
-								"Neoplastic": {
-									"range": [
-										"Neoplastic",
-										"Regular"
-									],
-									"type": "string",
-									"variabletype": "categorical"
-								},
-								"Non_ERCC_reads": {
-									"range": {
-										"max": 1540731,
-										"min": 43
-									},
+								"Genes_detected": {
+									"displayname": "Genes Detected",
 									"type": "int",
 									"variabletype": "continuous"
 								}
 							}
+
 						},
 						"status": {
 							"error": False,
@@ -598,11 +676,14 @@ class InitializeAPI(Resource):
 	})
 	def get(self):
 		schema = parse_schema(os.path.join(application.config["SCHEMAS_DIR"], "test_data_schema.json"))
+		options = {}
 		for s in schema:
+			options[s] = {}
 			if schema[s]["variabletype"] == "categorical":
-				schema[s]["range"] = []
+				# Default dict
+				options[s]["options"] = defaultdict(int)
 			else:
-				schema[s]["range"] = {
+				options[s]["range"] = {
 					"min": None,
 					"max": None
 				}
@@ -615,18 +696,18 @@ class InitializeAPI(Resource):
 						datum = int(datum)
 					elif schema[s]["type"] == "float":
 						datum = float(datum)
-					if schema[s]["variabletype"] == "categorical" and datum not in schema[s]["range"]:
-						schema[s]["range"].append(datum)
+					if schema[s]["variabletype"] == "categorical":
+						options[s]["options"][datum] += 1
 					elif schema[s]["variabletype"] == "continuous":
-						if not schema[s]["range"]["min"] or datum < schema[s]["range"]["min"]:
-							schema[s]["range"]["min"] = datum
-						if not schema[s]["range"]["max"] or datum > schema[s]["range"]["max"]:
-							schema[s]["range"]["max"] = datum
+						if not options[s]["range"]["min"] or datum < options[s]["range"]["min"]:
+							options[s]["range"]["min"] = datum
+						if not options[s]["range"]["max"] or datum > options[s]["range"]["max"]:
+							options[s]["range"]["max"] = datum
 				except KeyError:
 					pass
 				except TypeError:
-					print(schema[s]["range"])
-		return make_payload({"schema": schema, "cellcount": len(metadata)})
+					print(options[s]["range"])
+		return make_payload({"schema": schema, "options": options, "cellcount": len(metadata)})
 
 
 api.add_resource(MetadataAPI, "/api/v0.1/metadata")

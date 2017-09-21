@@ -8,9 +8,9 @@ class EndPoints(unittest.TestCase):
 
 	def setUp(self):
 		# Local
-		# self.url_base = "http://localhost:5000/api/v0.1/"
+		self.url_base = "http://localhost:5000/api/v0.1/"
 		# Dev
-		self.url_base = "http://api-dev.clustering.czi.technology/api/v0.1/"
+		#self.url_base = "http://api-dev.clustering.czi.technology/api/v0.1/"
 		# Prod
 		# self.url_base = "http://api.clustering.czi.technology/api/v0.1/"
 		self.session = requests.Session()
@@ -75,7 +75,7 @@ class EndPoints(unittest.TestCase):
 		assert len(result_json["data"]['cells'])
 		assert len(result_json["data"]['cells'][0]['e']) == 1
 
-	def test_heatmap_post_celllist(self):
+	def test_heatmap_post_genelist_celllist(self):
 		url = "{base}{endpoint}".format(base=self.url_base, endpoint="expression")
 		result = self.session.post(url,data={"celllist": ["1001000012.C3"], "genelist": ["ABCD4"]})
 		assert result.status_code == 200
