@@ -10,7 +10,7 @@ class EndPoints(unittest.TestCase):
 		# Local
 		self.url_base = "http://localhost:5000/api/v0.1/"
 		# Dev
-		#self.url_base = "http://api-dev.clustering.czi.technology/api/v0.1/"
+		# self.url_base = "http://api-dev.clustering.czi.technology/api/v0.1/"
 		# Prod
 		# self.url_base = "http://api.clustering.czi.technology/api/v0.1/"
 		self.session = requests.Session()
@@ -57,7 +57,7 @@ class EndPoints(unittest.TestCase):
 
 	def test_heatmap_post_celllist(self):
 		url = "{base}{endpoint}".format(base=self.url_base, endpoint="expression")
-		result = self.session.post(url,data={"celllist": ["1001000012.C3"]})
+		result = self.session.post(url, data={"celllist": ["1001000012.C3"]})
 		assert result.status_code == 200
 		result_json = result.json()
 		assert 'data' in result_json
@@ -67,7 +67,7 @@ class EndPoints(unittest.TestCase):
 
 	def test_heatmap_post_genelist(self):
 		url = "{base}{endpoint}".format(base=self.url_base, endpoint="expression")
-		result = self.session.post(url,data={"genelist": ["ABCD4"]})
+		result = self.session.post(url, data={"genelist": ["ABCD4"]})
 		assert result.status_code == 200
 		result_json = result.json()
 		assert 'data' in result_json
@@ -77,7 +77,7 @@ class EndPoints(unittest.TestCase):
 
 	def test_heatmap_post_genelist_celllist(self):
 		url = "{base}{endpoint}".format(base=self.url_base, endpoint="expression")
-		result = self.session.post(url,data={"celllist": ["1001000012.C3"], "genelist": ["ABCD4"]})
+		result = self.session.post(url, data={"celllist": ["1001000012.C3"], "genelist": ["ABCD4"]})
 		assert result.status_code == 200
 		result_json = result.json()
 		assert 'data' in result_json
@@ -86,7 +86,9 @@ class EndPoints(unittest.TestCase):
 		assert len(result_json["data"]['cells'][0]['e']) == 1
 
 	def test_graph_endpoint(self):
-		url = "{base}{endpoint}?{params}".format(base=self.url_base, endpoint="graph", params="&".join(["cellsetname=AllCells", "similarpairsname=ExactHighInformationGenes", "similaritythreshold=0.3", "connectivity=20"]))
+		url = "{base}{endpoint}?{params}".format(base=self.url_base, endpoint="graph", params="&".join(
+			["cellsetname=AllCells", "similarpairsname=ExactHighInformationGenes", "similaritythreshold=0.3",
+			 "connectivity=20"]))
 		result = self.session.get(url)
 		assert result.status_code == 200
 
@@ -95,4 +97,30 @@ class EndPoints(unittest.TestCase):
 		result = self.session.get(url)
 		assert result.status_code == 200
 		result_json = result.json()
+
 		assert result_json["data"]["cellcount"] > 0
+
+	def test_filter(self):
+		url = "{base}{endpoint}?{params}".format(base=self.url_base, endpoint="filter", params="&".join(
+			["Class[]=Neoplastic", "ERCC_reads=150000,160000"]))
+		result = self.session.get(url)
+		# print(result.json())
+		assert result.status_code == 200
+		result_json = result.json()
+		print(result_json["data"].keys())
+		print(result_json["data"]["cellcount"])
+		assert result_json["data"]["cellcount"] > 0
+	
+	def test_filter_failure(self):
+		url = "{base}{endpoint}?{params}".format(base=self.url_base, endpoint="filter", params="&".join(
+			["Class[]=Neoplastic", "ERCC_reads=a,160000"]))
+		result = self.session.get(url)
+		assert result.status_code == 400
+		url = "{base}{endpoint}?{params}".format(base=self.url_base, endpoint="filter", params="&".join(
+			["sadfkljds[]=Neoplastic", "ERCC_reads=150000,160000"]))
+		result = self.session.get(url)
+		assert result.status_code == 400
+		url = "{base}{endpoint}?{params}".format(base=self.url_base, endpoint="filter", params="&".join(
+			["Class[]=Neoplastic", "ERCC_reads=150000"]))
+		result = self.session.get(url)
+		assert result.status_code == 400

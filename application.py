@@ -30,10 +30,10 @@ from ExpressionMatrix2 import ExpressionMatrix, CellIdList, invalidCellId
 graph_parser = reqparse.RequestParser()
 graph_parser.add_argument('cellsetname', type=str, default='AllCells', required=False, help="Named cell set")
 graph_parser.add_argument('similarpairsname', type=str, default='ExactHighInformationGenes', required=False,
-						  help="Named setof pairs")
+                          help="Named setof pairs")
 graph_parser.add_argument('similaritythreshold', type=float, required=False, default=0.3, help="Threshold between 0-1")
 graph_parser.add_argument('connectivity', type=int, required=False, default=20,
-						  help="Maximum connectivity, default is 20")
+                          help="Maximum connectivity, default is 20")
 
 metadata_parser = reqparse.RequestParser()
 metadata_parser.add_argument('celllist', type=str, action="append", required=False, help='List of cells by id')
@@ -356,7 +356,7 @@ class ExpressionAPI(Resource):
 					"example": {
 						"celllist": ["1001000173.G8", "1001000173.D4"],
 						"genelist": ["1/2-SBSRNA4", "A1BG", "A1BG-AS1", "A1CF", "A2LD1", "A2M", "A2ML1", "A2MP1",
-									 "A4GALT"]
+						             "A4GALT"]
 					}
 
 				}
@@ -474,7 +474,7 @@ class GraphAPI(Resource):
 		os.chdir(application.config['SCRATCH_DIR'])
 		e = ExpressionMatrix(application.config['DATA_DIR'])
 		e.createCellGraph('AllCells', args.cellsetname, args.similarpairsname, args.similaritythreshold,
-						  args.connectivity)
+		                  args.connectivity)
 		e.computeCellGraphLayout('AllCells')
 		vertices = e.getCellGraphVertices('AllCells')
 		data = [[e.getCellMetaDataValue(v.cellId, 'CellName'), v.x(), v.y()] for v in vertices]
@@ -532,68 +532,133 @@ def convert_variable(datatype, variable):
 		raise
 
 
-# class FilterAPI(Resource):
-# 	@swagger.doc({
-# 		'summary': 'get metadata schema, ranges for values, and cell count to initialize cellxgene app',
-# 		'parameters': [],
-# 		'responses': {
-# 			'200': {
-# 				'description': 'initialization data for UI',
-# 				'examples': {
-# 					'application/json': {
-# 						"data": {  }
-# 					}
-# 				}
-# 			},
-# 			'400': {
-# 				'description': 'bad query parames',
-# 			}
-# 		}
-# 	})
-# 	def get(self):
-# 		# TODO Allow random downsampling
-#
-# 		e = ExpressionMatrix(application.config['DATA_DIR'])
-# 		data = {
-# 			"reactive": False,
-# 			"cellids": [],
-# 			"expression": [],
-# 			"metadata": [],
-# 			"cellcount": 0,
-# 			"badmetadatacount": 0,
-# 		}
-# 		try:
-# 			qs = parse_querystring(request.args)
-# 		except QueryStringError as e:
-# 			return make_payload({}, str(e), 400)
-# 		metadata = parse_metadata()['cell_metadata']
-# 		bad_metadata_count = 0
-# 		# TODO Loop though cells only once
-# 		if len(qs):
-# 			error = False
-# 			for key, value in qs.items():
-# 				print(key, value)
-# 				keptcells = []
-# 				for cell in metadata:
-# 					try:
-# 						if value["variabletype"] == 'categorical':
-# 							if cell[key] in value["query"]:
-# 								keptcells.append(cell)
-# 						elif value["variabletype"] == 'continuous':
-# 							numerical_variable = convert_variable(value["type"], cell[key])
-# 							if value["query"]['min'] < numerical_variable < value["query"]['max']:
-# 								keptcells.append(cell)
-# 					except KeyError:
-# 						bad_metadata_count += 1
-# 				metadata = keptcells
-# 		data["cell_count"] = len(metadata)
-# 		if data["cellcount"] <= REACTIVE_LIMIT:
-# 			data["reactive"] = True
-# 			data["metadata"] = metadata
-# 			data["cellids"] = [m["CellName"] for m in metadata]
-# 			data["expression"] = parse_exp_data(data["cellids"])
-# 			data["badmetadatacount"] = bad_metadata_count
-# 		return make_payload(data)
+class FilterAPI(Resource):
+	@swagger.doc({
+		'summary': 'get metadata schema, ranges for values, and cell count to initialize cellxgene app',
+		'parameters': [],
+		'responses': {
+			'200': {
+				'description': 'initialization data for UI',
+				'examples': {
+					'application/json': {
+						"data": {
+							"data": {
+								"badmetadatacount": 0,
+								"cellcount": 0,
+								"cellids": ["..."],
+								"expression": {
+									"cells": [
+										{
+											"cellname": "1001000012.B12",
+											"e": ["..."]
+										}
+
+									],
+									"genes": [
+										"1/2-SBSRNA4",
+										"A1BG",
+										"A1BG-AS1",
+									],
+								},
+								"metadata": [
+									{
+										"CellName": "1001000173.G8",
+										"Class": "Neoplastic",
+										"Cluster_2d": "11",
+										"Cluster_2d_color": "#8C564B",
+										"Cluster_CNV": "1",
+										"Cluster_CNV_color": "#1F77B4",
+										"ERCC_reads": "152104",
+										"ERCC_to_non_ERCC": "0.562454470489481",
+										"Genes_detected": "1962",
+										"Location": "Tumor",
+										"Location.color": "#FF7F0E",
+										"Multimapping_reads_percent": "2.67",
+										"Neoplastic": "Neoplastic",
+										"Non_ERCC_reads": "270429",
+										"Sample.name": "BT_S2",
+										"Sample.name.color": "#AEC7E8",
+										"Sample.type": "Glioblastoma",
+										"Sample.type.color": "#1F77B4",
+										"Selection": "Unpanned",
+										"Selection.color": "#98DF8A",
+										"Splice_sites_AT.AC": "102",
+										"Splice_sites_Annotated": "122397",
+										"Splice_sites_GC.AG": "761",
+										"Splice_sites_GT.AG": "125741",
+										"Splice_sites_non_canonical": "56",
+										"Splice_sites_total": "126660",
+										"Total_reads": "1741039",
+										"Unique_reads": "1400382",
+										"Unique_reads_percent": "80.43",
+										"Unmapped_mismatch": "2.15",
+										"Unmapped_other": "0.18",
+										"Unmapped_short": "14.56",
+										"housekeeping_cluster": "2",
+										"housekeeping_cluster_color": "#AEC7E8",
+										"recluster_myeloid": "NA",
+										"recluster_myeloid_color": "NA"
+									},
+								],
+								"reactive": True
+							},
+							"status": {
+								"error": False,
+								"errormessage": ""
+							}
+
+						},
+					}
+				}
+			},
+			'400': {
+				'description': 'bad query parames',
+			}
+		}
+	})
+	def get(self):
+		# TODO Allow random downsampling
+
+		e = ExpressionMatrix(application.config['DATA_DIR'])
+		data = {
+			"reactive": False,
+			"cellids": [],
+			"expression": [],
+			"metadata": [],
+			"cellcount": 0,
+			"badmetadatacount": 0,
+		}
+		try:
+			qs = parse_querystring(request.args)
+		except QueryStringError as e:
+			return make_payload({}, str(e), 400)
+		metadata = parse_metadata()['cell_metadata']
+		bad_metadata_count = 0
+		keptcells = []
+		if len(qs):
+			error = False
+			for cell in metadata:
+				for key, value in qs.items():
+					try:
+						if value["variabletype"] == 'categorical':
+							if cell[key] not in value["query"]:
+								break
+						elif value["variabletype"] == 'continuous':
+							numerical_variable = convert_variable(value["type"], cell[key])
+							if not (value["query"]['min'] < numerical_variable < value["query"]['max']):
+								break
+					except KeyError:
+						bad_metadata_count += 1
+				else:
+					keptcells.append(cell)
+		data["cellcount"] = len(keptcells)
+		if data["cellcount"] <= REACTIVE_LIMIT:
+			data["reactive"] = True
+			data["metadata"] = keptcells
+			data["cellids"] = [m["CellName"] for m in keptcells]
+			data["expression"] = parse_exp_data(data["cellids"])
+			data["badmetadatacount"] = bad_metadata_count
+		return make_payload(data)
 
 
 class InitializeAPI(Resource):
@@ -714,7 +779,7 @@ api.add_resource(MetadataAPI, "/api/v0.1/metadata")
 api.add_resource(ExpressionAPI, "/api/v0.1/expression")
 api.add_resource(GraphAPI, "/api/v0.1/graph")
 api.add_resource(InitializeAPI, "/api/v0.1/initialize")
-# api.add_resource(FilterAPI, "/api/v0.1/filter")
+api.add_resource(FilterAPI, "/api/v0.1/filter")
 
 if __name__ == "__main__":
 	application.run(host='0.0.0.0', debug=True)
