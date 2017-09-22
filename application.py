@@ -2,7 +2,7 @@ import csv, sys, os
 from collections import defaultdict
 
 from functools import wraps
-from flask import Flask, jsonify, redirect, url_for, send_file, request, make_response
+from flask import Flask, jsonify, redirect, url_for, send_file, request, make_response, render_template
 from flask_restful import reqparse
 from flask_restful_swagger_2 import Api, swagger, Resource
 from flask_dance.contrib.google import make_google_blueprint, google
@@ -112,6 +112,56 @@ def make_payload(data, errormessage="", errorcode=200):
 	}), errorcode)
 
 
+def parse_querystring(qs):
+	schema = parse_schema(os.path.join(application.config["SCHEMAS_DIR"], "test_data_schema.json"))
+	query = {}
+	for key in qs:
+		value = None
+		if key.endswith("[]"):
+			value = qs.getlist(key)
+			key = key[:-2]
+		else:
+			value = qs[key]
+		if key not in schema:
+			raise QueryStringError("Error: key {} not in metadata schema".format(key))
+		query[key] = schema[key]
+		if query[key]["variabletype"] == "categorical":
+			query[key]["query"] = convert_variable(query[key]["variabletype"], value)
+		elif query[key]["variabletype"] == "continuous":
+			try:
+				min, max = value.split(",")
+			except ValueError:
+				raise QueryStringError("Error: min,max format required for range for key {}, got {}".format(key, value))
+			if min == "*":
+				min = "-inf"
+			if max == "*":
+				max = "inf"
+			try:
+				query[key]["query"] = {
+					"min": convert_variable(query[key]["type"], min),
+					"max": convert_variable(query[key]["type"], max)
+				}
+			except ValueError:
+				raise QueryStringError(
+					"Error: expected type {} for key {}, got {}".format(query[key]["type"], key, value))
+	return query
+
+
+class QueryStringError(Exception):
+	pass
+
+
+def convert_variable(datatype, variable):
+	try:
+		if datatype == "int":
+			variable = int(variable)
+		elif datatype == "float":
+			variable = float(variable)
+		return variable
+	except ValueError:
+		print("Bad conversion")
+		raise
+
 # ---- Decorators -------------
 def login_required(f):
 	@wraps(f)
@@ -126,7 +176,7 @@ def login_required(f):
 # ---- Traditional Routes -----
 @application.route('/')
 def index():
-	return "Clutering API"
+	return render_template("swagger.html")
 
 
 # @application.route('/glogin')
@@ -481,55 +531,7 @@ class GraphAPI(Resource):
 		return make_payload(data)
 
 
-def parse_querystring(qs):
-	schema = parse_schema(os.path.join(application.config["SCHEMAS_DIR"], "test_data_schema.json"))
-	query = {}
-	for key in qs:
-		value = None
-		if key.endswith("[]"):
-			value = qs.getlist(key)
-			key = key[:-2]
-		else:
-			value = qs[key]
-		if key not in schema:
-			raise QueryStringError("Error: key {} not in metadata schema".format(key))
-		query[key] = schema[key]
-		if query[key]["variabletype"] == "categorical":
-			query[key]["query"] = convert_variable(query[key]["variabletype"], value)
-		elif query[key]["variabletype"] == "continuous":
-			try:
-				min, max = value.split(",")
-			except ValueError:
-				raise QueryStringError("Error: min,max format required for range for key {}, got {}".format(key, value))
-			if min == "*":
-				min = "-inf"
-			if max == "*":
-				max = "inf"
-			try:
-				query[key]["query"] = {
-					"min": convert_variable(query[key]["type"], min),
-					"max": convert_variable(query[key]["type"], max)
-				}
-			except ValueError:
-				raise QueryStringError(
-					"Error: expected type {} for key {}, got {}".format(query[key]["type"], key, value))
-	return query
 
-
-class QueryStringError(Exception):
-	pass
-
-
-def convert_variable(datatype, variable):
-	try:
-		if datatype == "int":
-			variable = int(variable)
-		elif datatype == "float":
-			variable = float(variable)
-		return variable
-	except ValueError:
-		print("Bad conversion")
-		raise
 
 
 class FilterAPI(Resource):
