@@ -536,7 +536,7 @@ class GraphAPI(Resource):
 
 class CellsAPI(Resource):
 	@swagger.doc({
-		'summary': 'get metadata schema, ranges for values, and cell count to initialize cellxgene app',
+		'summary': 'filter based on metadata fields to get a subset cells, expression data, and metadata',
 		'parameters': [],
 		'responses': {
 			'200': {
