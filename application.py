@@ -7,6 +7,7 @@ from flask_restful import reqparse
 from flask_restful_swagger_2 import Api, swagger, Resource
 from flask_dance.contrib.google import make_google_blueprint, google
 from flask_cors import CORS
+import numpy as np
 
 from schemaparse import parse_schema
 
@@ -42,6 +43,7 @@ metadata_parser.add_argument('format', type=str, help='Format: json or csv')
 expression_parser = reqparse.RequestParser()
 expression_parser.add_argument('celllist', type=str, action="append", required=False, help='List of cells by id')
 expression_parser.add_argument('genelist', type=str, action="append", required=False, help='List of genes by name')
+expression_parser.add_argument('expressed_genes_only', type=bool, required=False, help='Exclude genes with zero expression across cells')
 
 
 # ---- Helper Functions -------
@@ -63,41 +65,39 @@ def parse_metadata(cell_ids=False):
 		mdict = [stringstringpairs2dict(m) for m in metadata]
 	return {"cell_metadata": mdict}
 
+def parse_exp_data(cells=(), genes=(), limit=0, zeros=False):
+	e = ExpressionMatrix("/code/clustering_flask_api/data")
+	cell_number_ids = CellIdList()
+	if cells:
+		for cell_id in cells:
+			cell_number_ids.append(e.cellIdFromString(cell_id))
+	else:
+		cell_number_ids = e.getCellSet('AllCells')
+	if not genes:
+		genes = [e.geneName(gid) for gid in range(e.geneCount())]
 
-def parse_exp_data(cells=[], genes=[], limit=0):
-	with open(application.config["GBM_DIR"] + "GBM_data-noERCC.csv") as fi:
-		reader = csv.reader(fi)
-		cell_list = next(reader)
-		cell_idxs = []
-		cell_data = {}
-		gene_list = []
-		for idx, el in enumerate(cell_list[1:]):
-			if not cells or \
-					(cells and el in cells):
-				cell_idxs.append(idx + 1)
+	expression = np.zeros([len(genes), len(list(cell_number_ids))])
+	for idx, gene in enumerate(genes):
+		expression[idx] = list(e.getCellsExpressionCountFromGeneName(cell_number_ids, gene))
+	if zeros:
+		genes_expressed = expression.any(axis=1)
+		genes = [genes[idx] for idx, val in enumerate(genes_expressed) if val]
+		expression = expression[genes_expressed]
 
-		if limit:
-			if cell_idxs and len(cell_idxs) > limit:
-				cell_idxs = cell_idxs[:limit + 1]
-			else:
-				cell_idxs = [i for i in range(1, limit)]
-		for idx in cell_idxs:
-			cell_data[cell_list[idx]] = []
-		for idx, row in enumerate(reader):
-			gene = row[0]
-			if not genes or (gene in genes):
-				gene_list.append(gene)
-			else:
-				continue
-
-			for idx in cell_idxs:
-				cell_data[cell_list[idx]].append(int(row[idx]))
-		cell_data = [{"cellname": k, "e": v} for k, v in cell_data.items()]
+	if limit and len(genes) > limit:
+		genes = genes[:limit]
+		expression = expression[:limit]
+	cell_data = []
+	for idx, cid in enumerate(cell_number_ids):
+		cell_data.append({
+			"cellname": e.getCellMetaDataValue(cid, "CellName"),
+			"e": list(expression[:,idx]),
+		})
 	return {
-		"genes": gene_list,
-		"cells": cell_data
+		"genes": genes,
+		"cells": cell_data,
+		"nonzero_gene_count": int(np.sum(expression.any(axis=1)))
 	}
-
 
 def make_payload(data, errormessage="", errorcode=200):
 	error = False
@@ -381,7 +381,8 @@ class ExpressionAPI(Resource):
 								"1001000173.B4",
 								"1001000173.A2",
 								"1001000173.E2"
-							]
+							],
+							"nonzero_gene_count": 2857
 						},
 						"status": {
 							"error": False,
@@ -406,7 +407,8 @@ class ExpressionAPI(Resource):
 					"example": {
 						"celllist": ["1001000173.G8", "1001000173.D4"],
 						"genelist": ["1/2-SBSRNA4", "A1BG", "A1BG-AS1", "A1CF", "A2LD1", "A2M", "A2ML1", "A2MP1",
-						             "A4GALT"]
+						             "A4GALT"],
+						"expressed_genes_only": True,
 					}
 
 				}
@@ -431,7 +433,8 @@ class ExpressionAPI(Resource):
 							"genes": [
 								"ABCD4",
 								"ZWINT"
-							]
+							],
+							"nonzero_gene_count": 2857
 						},
 						"status": {
 							"error": False,
@@ -450,9 +453,10 @@ class ExpressionAPI(Resource):
 		args = self.parser.parse_args()
 		cell_list = args.get('celllist', [])
 		gene_list = args.get('genelist', [])
+		zeros = args.get('expressed_genes_only', False)
 		if not (cell_list) and not (gene_list):
 			return make_payload([], "must include celllist and/or genelist parameter", 400)
-		data = parse_exp_data(cell_list, gene_list)
+		data = parse_exp_data(cell_list, gene_list, zeros=zeros)
 		if cell_list and len(data['cells']) < len(cell_list):
 			return make_payload([], "Some cell ids not available", 400)
 		if gene_list and len(data['genes']) < len(gene_list):
@@ -660,7 +664,7 @@ class CellsAPI(Resource):
 			data["reactive"] = True
 			data["metadata"] = keptcells
 			data["cellids"] = [m["CellName"] for m in keptcells]
-			# data["expression"] = parse_exp_data(data["cellids"])
+			# data["expression"] = parse_exp_data2(data["cellids"])
 			data["badmetadatacount"] = bad_metadata_count
 		return make_payload(data)
 
