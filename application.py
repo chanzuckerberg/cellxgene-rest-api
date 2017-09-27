@@ -552,20 +552,6 @@ class CellsAPI(Resource):
 								"badmetadatacount": 0,
 								"cellcount": 0,
 								"cellids": ["..."],
-								"expression": {
-									"cells": [
-										{
-											"cellname": "1001000012.B12",
-											"e": ["..."]
-										}
-
-									],
-									"genes": [
-										"1/2-SBSRNA4",
-										"A1BG",
-										"A1BG-AS1",
-									],
-								},
 								"metadata": [
 									{
 										"CellName": "1001000173.G8",
