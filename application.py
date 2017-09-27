@@ -469,27 +469,27 @@ class GraphAPI(Resource):
 		'parameters': [
 			{
 				'name': 'cellsetname',
-				'description': 'Named cell set ex. "AllCells"',
-				'in': 'query',
+				'description': "Named cell set ex. 'AllCells'",
+				'in': 'path',
 				'type': 'string',
 			},
 			{
 				'name': 'similarpairsname',
-				'description': 'Named set of pairs ex. "ExtractHighInformationGenes"',
-				'in': 'query',
+				'description': "Named set of pairs ex. 'ExtractHighInformationGenes'",
+				'in': 'path',
 				'type': 'string',
 			},
 			{
 				'name': 'similaritythreshold',
 				'description': 'Threshold between 0-1 ex. 0.3',
-				'in': 'query',
-				'type': 'float',
+				'in': 'path',
+				'type': 'number',
 			},
 			{
 				'name': 'connectivity',
 				'description': 'Maximum connectivity ex. 20',
-				'in': 'query',
-				'type': 'int',
+				'in': 'path',
+				'type': 'number',
 			}
 		],
 		'responses': {
@@ -534,7 +534,7 @@ class GraphAPI(Resource):
 
 
 
-class FilterAPI(Resource):
+class CellsAPI(Resource):
 	@swagger.doc({
 		'summary': 'get metadata schema, ranges for values, and cell count to initialize cellxgene app',
 		'parameters': [],
@@ -781,7 +781,7 @@ api.add_resource(MetadataAPI, "/api/v0.1/metadata")
 api.add_resource(ExpressionAPI, "/api/v0.1/expression")
 api.add_resource(GraphAPI, "/api/v0.1/graph")
 api.add_resource(InitializeAPI, "/api/v0.1/initialize")
-api.add_resource(FilterAPI, "/api/v0.1/filter")
+api.add_resource(CellsAPI, "/api/v0.1/cells")
 
 if __name__ == "__main__":
 	application.run(host='0.0.0.0', debug=True)

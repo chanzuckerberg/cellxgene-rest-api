@@ -100,8 +100,8 @@ class EndPoints(unittest.TestCase):
 
 		assert result_json["data"]["cellcount"] > 0
 
-	def test_filter(self):
-		url = "{base}{endpoint}?{params}".format(base=self.url_base, endpoint="filter", params="&".join(
+	def test_cells(self):
+		url = "{base}{endpoint}?{params}".format(base=self.url_base, endpoint="cells", params="&".join(
 			["Class[]=Neoplastic", "ERCC_reads=150000,160000"]))
 		result = self.session.get(url)
 		# print(result.json())
@@ -111,16 +111,16 @@ class EndPoints(unittest.TestCase):
 		print(result_json["data"]["cellcount"])
 		assert result_json["data"]["cellcount"] > 0
 	
-	def test_filter_failure(self):
-		url = "{base}{endpoint}?{params}".format(base=self.url_base, endpoint="filter", params="&".join(
+	def test_cells_failure(self):
+		url = "{base}{endpoint}?{params}".format(base=self.url_base, endpoint="cells", params="&".join(
 			["Class[]=Neoplastic", "ERCC_reads=a,160000"]))
 		result = self.session.get(url)
 		assert result.status_code == 400
-		url = "{base}{endpoint}?{params}".format(base=self.url_base, endpoint="filter", params="&".join(
+		url = "{base}{endpoint}?{params}".format(base=self.url_base, endpoint="cells", params="&".join(
 			["sadfkljds[]=Neoplastic", "ERCC_reads=150000,160000"]))
 		result = self.session.get(url)
 		assert result.status_code == 400
-		url = "{base}{endpoint}?{params}".format(base=self.url_base, endpoint="filter", params="&".join(
+		url = "{base}{endpoint}?{params}".format(base=self.url_base, endpoint="cells", params="&".join(
 			["Class[]=Neoplastic", "ERCC_reads=150000"]))
 		result = self.session.get(url)
 		assert result.status_code == 400
