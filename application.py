@@ -66,7 +66,7 @@ def parse_metadata(cell_ids=False):
 	return {"cell_metadata": mdict}
 
 def parse_exp_data(cells=(), genes=(), limit=0, zeros=False):
-	e = ExpressionMatrix("/code/clustering_flask_api/data")
+	e = ExpressionMatrix(application.config["DATA_DIR"])
 	cell_number_ids = CellIdList()
 	if cells:
 		for cell_id in cells:
