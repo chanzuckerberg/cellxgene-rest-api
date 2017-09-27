@@ -13,7 +13,7 @@ from schemaparse import parse_schema
 application = Flask(__name__)
 CORS(application)
 
-REACTIVE_LIMIT = 1000
+REACTIVE_LIMIT = 5000
 
 application.config.from_pyfile('app.cfg', silent=True)
 api = Api(application, api_version='0.1', api_spec_url='/api/swagger')
@@ -653,12 +653,14 @@ class CellsAPI(Resource):
 						bad_metadata_count += 1
 				else:
 					keptcells.append(cell)
+		else:
+			keptcells = metadata
 		data["cellcount"] = len(keptcells)
 		if data["cellcount"] <= REACTIVE_LIMIT:
 			data["reactive"] = True
 			data["metadata"] = keptcells
 			data["cellids"] = [m["CellName"] for m in keptcells]
-			data["expression"] = parse_exp_data(data["cellids"])
+			# data["expression"] = parse_exp_data(data["cellids"])
 			data["badmetadatacount"] = bad_metadata_count
 		return make_payload(data)
 
