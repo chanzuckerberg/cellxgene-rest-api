@@ -3,7 +3,7 @@ import requests
 
 
 class EndPoints(unittest.TestCase):
-	"""Test Case for metadata endpoint"""
+	"""Test Case for endpoints"""
 
 	def setUp(self):
 		# Local
@@ -13,20 +13,6 @@ class EndPoints(unittest.TestCase):
 		# Prod
 		# self.url_base = "http://api.clustering.czi.technology/api/v0.1/"
 		self.session = requests.Session()
-
-	def test_get(self):
-		url = "{base}{endpoint}".format(base=self.url_base, endpoint="metadata")
-		result = self.session.get(url)
-		assert result.status_code == 200
-		assert len(result.text)
-
-	def test_get_json(self):
-		url = "{base}{endpoint}?{params}".format(base=self.url_base, endpoint="metadata", params="format=json")
-		result = self.session.get(url)
-		assert result.status_code == 200
-		result_json = result.json()
-		assert 'data' in result_json
-		assert len(result_json['data']['cell_metadata'])
 
 	def test_cell_list(self):
 		url = "{base}{endpoint}".format(base=self.url_base, endpoint="metadata")
@@ -111,11 +97,8 @@ class EndPoints(unittest.TestCase):
 		url = "{base}{endpoint}?{params}".format(base=self.url_base, endpoint="cells", params="&".join(
 			["Class[]=Neoplastic", "ERCC_reads=150000,160000"]))
 		result = self.session.get(url)
-		# print(result.json())
 		assert result.status_code == 200
 		result_json = result.json()
-		print(result_json["data"].keys())
-		print(result_json["data"]["cellcount"])
 		assert result_json["data"]["cellcount"] > 0
 	
 	def test_cells_failure(self):

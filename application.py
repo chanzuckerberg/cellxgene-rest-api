@@ -148,6 +148,39 @@ def parse_querystring(qs):
 					"Error: expected type {} for key {}, got {}".format(query[key]["type"], key, value))
 	return query
 
+def get_metadata_ranges(schema, metadata):
+	options = {}
+	for s in schema:
+		options[s] = {}
+		if schema[s]["variabletype"] == "categorical":
+			# Default dict
+			options[s]["options"] = defaultdict(int)
+		else:
+			options[s]["range"] = {
+				"min": None,
+				"max": None
+			}
+	for cell in metadata:
+		for s in schema:
+			try:
+				datum = cell[s]
+				if schema[s]["type"] == "int":
+					datum = int(datum)
+				elif schema[s]["type"] == "float":
+					datum = float(datum)
+				if schema[s]["variabletype"] == "categorical":
+					options[s]["options"][datum] += 1
+				elif schema[s]["variabletype"] == "continuous":
+					if not options[s]["range"]["min"] or datum < options[s]["range"]["min"]:
+						options[s]["range"]["min"] = datum
+					if not options[s]["range"]["max"] or datum > options[s]["range"]["max"]:
+						options[s]["range"]["max"] = datum
+			except KeyError:
+				pass
+			except TypeError:
+				print(options[s]["range"])
+	return options
+
 
 class QueryStringError(Exception):
 	pass
@@ -598,15 +631,16 @@ class CellsAPI(Resource):
 		data = {
 			"reactive": False,
 			"cellids": [],
-			"expression": [],
 			"metadata": [],
 			"cellcount": 0,
 			"badmetadatacount": 0,
+			"ranges": {}
 		}
 		try:
 			qs = parse_querystring(request.args)
 		except QueryStringError as e:
 			return make_payload({}, str(e), 400)
+		schema = parse_schema(os.path.join(application.config["SCHEMAS_DIR"], "test_data_schema.json"))
 		metadata = parse_metadata()['cell_metadata']
 		bad_metadata_count = 0
 		keptcells = []
@@ -628,11 +662,14 @@ class CellsAPI(Resource):
 					keptcells.append(cell)
 		else:
 			keptcells = metadata
+
+		ranges = get_metadata_ranges(schema, keptcells)
 		data["cellcount"] = len(keptcells)
 		if data["cellcount"] <= REACTIVE_LIMIT:
 			data["reactive"] = True
 			data["metadata"] = keptcells
 			data["cellids"] = [m["CellName"] for m in keptcells]
+			data["ranges"] = ranges
 			# data["expression"] = parse_exp_data2(data["cellids"])
 			data["badmetadatacount"] = bad_metadata_count
 		return make_payload(data)
@@ -718,38 +755,12 @@ class InitializeAPI(Resource):
 	})
 	def get(self):
 		schema = parse_schema(os.path.join(application.config["SCHEMAS_DIR"], "test_data_schema.json"))
-		options = {}
-		for s in schema:
-			options[s] = {}
-			if schema[s]["variabletype"] == "categorical":
-				# Default dict
-				options[s]["options"] = defaultdict(int)
-			else:
-				options[s]["range"] = {
-					"min": None,
-					"max": None
-				}
 		metadata = parse_metadata()["cell_metadata"]
-		for cell in metadata:
-			for s in schema:
-				try:
-					datum = cell[s]
-					if schema[s]["type"] == "int":
-						datum = int(datum)
-					elif schema[s]["type"] == "float":
-						datum = float(datum)
-					if schema[s]["variabletype"] == "categorical":
-						options[s]["options"][datum] += 1
-					elif schema[s]["variabletype"] == "continuous":
-						if not options[s]["range"]["min"] or datum < options[s]["range"]["min"]:
-							options[s]["range"]["min"] = datum
-						if not options[s]["range"]["max"] or datum > options[s]["range"]["max"]:
-							options[s]["range"]["max"] = datum
-				except KeyError:
-					pass
-				except TypeError:
-					print(options[s]["range"])
+
+		options = get_metadata_ranges(schema, metadata)
 		return make_payload({"schema": schema, "options": options, "cellcount": len(metadata)})
+
+
 
 
 api.add_resource(MetadataAPI, "/api/v0.1/metadata")
