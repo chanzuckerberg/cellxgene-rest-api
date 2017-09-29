@@ -213,34 +213,6 @@ class MetadataAPI(Resource):
 		self.parser = metadata_parser
 
 	@swagger.doc({
-		'summary': 'Returns a either a csv file or a json document containing the metadata for all cells',
-		'parameters': [
-			{
-				'name': 'format',
-				'description': 'format of file',
-				'in': 'query',
-				'type': 'string',
-				'required': False,
-			}
-		],
-		"produces": [
-			"text/csv",
-			"application/json"
-		],
-		'responses': {
-			'200': {
-				'description': 'successful operation',
-			}
-		}
-	})
-	def get(self):
-		args = self.parser.parse_args()
-		if args.format and args.format.lower() == 'json':
-			metadata = parse_metadata()
-			return make_payload(metadata)
-		return send_file(application.config["GBM_DIR"] + "GBM_metadata.csv", mimetype="text/csv")
-
-	@swagger.doc({
 		'summary': 'Json document containing the metadata for list of cells',
 		'parameters': [
 			{
