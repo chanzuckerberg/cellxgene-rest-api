@@ -1,6 +1,5 @@
 import unittest
 import requests
-import json
 
 
 class EndPoints(unittest.TestCase):
@@ -64,6 +63,13 @@ class EndPoints(unittest.TestCase):
 		assert len(result_json['data']['genes'])
 		assert len(result_json["data"]['cells']) == 1
 		assert len(result_json["data"]['cells'][0]['e'])
+		print(result_json['data']['genes'])
+		assert result_json["data"]['nonzero_gene_count']
+		result = self.session.post(url, data={"celllist": ["1001000012.C3"], "include_unexpressed_genes": True})
+		assert result.status_code == 200
+		result_json_unexpressed = result.json()
+		assert len(result_json["data"]['genes']) < len(result_json_unexpressed["data"]['genes'])
+
 
 	def test_heatmap_post_genelist(self):
 		url = "{base}{endpoint}".format(base=self.url_base, endpoint="expression")
@@ -77,7 +83,8 @@ class EndPoints(unittest.TestCase):
 
 	def test_heatmap_post_genelist_celllist(self):
 		url = "{base}{endpoint}".format(base=self.url_base, endpoint="expression")
-		result = self.session.post(url, data={"celllist": ["1001000012.C3"], "genelist": ["ABCD4"]})
+		result = self.session.post(url, data={"celllist": ["1001000012.C3"], "genelist": ["AASS"]})
+		print(result.status_code)
 		assert result.status_code == 200
 		result_json = result.json()
 		assert 'data' in result_json

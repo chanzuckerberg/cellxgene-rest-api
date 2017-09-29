@@ -43,7 +43,8 @@ metadata_parser.add_argument('format', type=str, help='Format: json or csv')
 expression_parser = reqparse.RequestParser()
 expression_parser.add_argument('celllist', type=str, action="append", required=False, help='List of cells by id')
 expression_parser.add_argument('genelist', type=str, action="append", required=False, help='List of genes by name')
-expression_parser.add_argument('include_expressed_genes', type=bool, required=False, help='Include genes with zero expression across cell set')
+expression_parser.add_argument('include_unexpressed_genes', type=bool, required=False,
+                               help='Include genes with zero expression across cell set')
 
 
 # ---- Helper Functions -------
@@ -65,6 +66,7 @@ def parse_metadata(cell_ids=False):
 		mdict = [stringstringpairs2dict(m) for m in metadata]
 	return {"cell_metadata": mdict}
 
+
 def parse_exp_data(cells=(), genes=(), limit=0, unexpressed_genes=False):
 	e = ExpressionMatrix(application.config["DATA_DIR"])
 	cell_number_ids = CellIdList()
@@ -75,7 +77,6 @@ def parse_exp_data(cells=(), genes=(), limit=0, unexpressed_genes=False):
 		cell_number_ids = e.getCellSet('AllCells')
 	if not genes:
 		genes = [e.geneName(gid) for gid in range(e.geneCount())]
-
 	expression = np.zeros([len(genes), len(list(cell_number_ids))])
 	for idx, gene in enumerate(genes):
 		expression[idx] = list(e.getCellsExpressionCountFromGeneName(cell_number_ids, gene))
@@ -91,13 +92,14 @@ def parse_exp_data(cells=(), genes=(), limit=0, unexpressed_genes=False):
 	for idx, cid in enumerate(cell_number_ids):
 		cell_data.append({
 			"cellname": e.getCellMetaDataValue(cid, "CellName"),
-			"e": list(expression[:,idx]),
+			"e": list(expression[:, idx]),
 		})
 	return {
 		"genes": genes,
 		"cells": cell_data,
 		"nonzero_gene_count": int(np.sum(expression.any(axis=1)))
 	}
+
 
 def make_payload(data, errormessage="", errorcode=200):
 	error = False
@@ -161,6 +163,7 @@ def convert_variable(datatype, variable):
 	except ValueError:
 		print("Bad conversion")
 		raise
+
 
 # ---- Decorators -------------
 def login_required(f):
@@ -362,7 +365,14 @@ class ExpressionAPI(Resource):
 
 	@swagger.doc({
 		'summary': 'Json with gene list and expression data by cell, limited to first 40 cells',
-		'parameters': [],
+		'parameters': [
+			{
+				'name': 'include_unexpressed_genes',
+				'description': "Include genes that have 0 expression across all cells in set",
+				'in': 'path',
+				'type': 'bool',
+			}
+		],
 		'responses': {
 			'200': {
 				'description': 'Json for heatmap',
@@ -394,9 +404,11 @@ class ExpressionAPI(Resource):
 		}
 	})
 	def get(self):
-		# TODO add choice for limit
-		# TODO add optin for choosing zero genes
-		data = parse_exp_data(limit=40)
+		# TODO add choice for limit (pagination?)
+		args = self.parser.parse_args()
+		unexpressed_genes = args.get('include_unexpressed_genes', False)
+
+		data = parse_exp_data(limit=40, unexpressed_genes=unexpressed_genes)
 		return make_payload(data)
 
 	@swagger.doc({
@@ -410,7 +422,7 @@ class ExpressionAPI(Resource):
 						"celllist": ["1001000173.G8", "1001000173.D4"],
 						"genelist": ["1/2-SBSRNA4", "A1BG", "A1BG-AS1", "A1CF", "A2LD1", "A2M", "A2ML1", "A2MP1",
 						             "A4GALT"],
-						"expressed_genes_only": True,
+						"include_unexpressed_genes": True,
 					}
 
 				}
@@ -452,7 +464,6 @@ class ExpressionAPI(Resource):
 		}
 	})
 	def post(self):
-		# TODO add optin for choosing zero genes
 		args = self.parser.parse_args()
 		cell_list = args.get('celllist', [])
 		gene_list = args.get('genelist', [])
@@ -536,9 +547,6 @@ class GraphAPI(Resource):
 		vertices = e.getCellGraphVertices('AllCells')
 		data = [[e.getCellMetaDataValue(v.cellId, 'CellName'), v.x(), v.y()] for v in vertices]
 		return make_payload(data)
-
-
-
 
 
 class CellsAPI(Resource):
