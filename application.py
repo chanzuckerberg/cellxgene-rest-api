@@ -43,7 +43,7 @@ metadata_parser.add_argument('format', type=str, help='Format: json or csv')
 expression_parser = reqparse.RequestParser()
 expression_parser.add_argument('celllist', type=str, action="append", required=False, help='List of cells by id')
 expression_parser.add_argument('genelist', type=str, action="append", required=False, help='List of genes by name')
-expression_parser.add_argument('expressed_genes_only', type=bool, required=False, help='Exclude genes with zero expression across cells')
+expression_parser.add_argument('include_expressed_genes', type=bool, required=False, help='Include genes with zero expression across cell set')
 
 
 # ---- Helper Functions -------
@@ -65,7 +65,7 @@ def parse_metadata(cell_ids=False):
 		mdict = [stringstringpairs2dict(m) for m in metadata]
 	return {"cell_metadata": mdict}
 
-def parse_exp_data(cells=(), genes=(), limit=0, zeros=False):
+def parse_exp_data(cells=(), genes=(), limit=0, unexpressed_genes=False):
 	e = ExpressionMatrix(application.config["DATA_DIR"])
 	cell_number_ids = CellIdList()
 	if cells:
@@ -79,7 +79,7 @@ def parse_exp_data(cells=(), genes=(), limit=0, zeros=False):
 	expression = np.zeros([len(genes), len(list(cell_number_ids))])
 	for idx, gene in enumerate(genes):
 		expression[idx] = list(e.getCellsExpressionCountFromGeneName(cell_number_ids, gene))
-	if zeros:
+	if not unexpressed_genes:
 		genes_expressed = expression.any(axis=1)
 		genes = [genes[idx] for idx, val in enumerate(genes_expressed) if val]
 		expression = expression[genes_expressed]
@@ -394,6 +394,8 @@ class ExpressionAPI(Resource):
 		}
 	})
 	def get(self):
+		# TODO add choice for limit
+		# TODO add optin for choosing zero genes
 		data = parse_exp_data(limit=40)
 		return make_payload(data)
 
@@ -450,13 +452,14 @@ class ExpressionAPI(Resource):
 		}
 	})
 	def post(self):
+		# TODO add optin for choosing zero genes
 		args = self.parser.parse_args()
 		cell_list = args.get('celllist', [])
 		gene_list = args.get('genelist', [])
-		zeros = args.get('expressed_genes_only', False)
+		unexpressed_genes = args.get('include_unexpressed_genes', False)
 		if not (cell_list) and not (gene_list):
 			return make_payload([], "must include celllist and/or genelist parameter", 400)
-		data = parse_exp_data(cell_list, gene_list, zeros=zeros)
+		data = parse_exp_data(cell_list, gene_list, unexpressed_genes=unexpressed_genes)
 		if cell_list and len(data['cells']) < len(cell_list):
 			return make_payload([], "Some cell ids not available", 400)
 		if gene_list and len(data['genes']) < len(gene_list):
