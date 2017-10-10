@@ -1,5 +1,7 @@
 import csv, sys, os
 from collections import defaultdict
+from random import randint
+from re import escape
 
 from functools import wraps
 from flask import Flask, jsonify, redirect, url_for, send_file, request, make_response, render_template
@@ -52,34 +54,24 @@ def stringstringpairs2dict(ssp):
 	return {i.first: i.second for i in ssp}
 
 
-def parse_metadata(cell_ids=False):
+def parse_metadata(cells):
 	e = ExpressionMatrix(application.config["DATA_DIR"])
-	cell_number_ids = CellIdList()
-	if cell_ids:
-		for cell_id in cell_ids:
-			cell_number_ids.append(e.cellIdFromString(cell_id))
-	else:
-		cell_number_ids = e.getCellSet('AllCells')
+
 	mdict = []
-	if invalidCellId not in cell_number_ids:
-		metadata = e.getCellsMetaData(cell_number_ids)
+	if invalidCellId not in cells:
+		metadata = e.getCellsMetaData(cells)
 		mdict = [stringstringpairs2dict(m) for m in metadata]
 	return {"cell_metadata": mdict}
 
 
-def parse_exp_data(cells=(), genes=(), limit=0, unexpressed_genes=False):
+def parse_exp_data(cells, genes=(), limit=0, unexpressed_genes=False):
 	e = ExpressionMatrix(application.config["DATA_DIR"])
-	cell_number_ids = CellIdList()
-	if cells:
-		for cell_id in cells:
-			cell_number_ids.append(e.cellIdFromString(cell_id))
-	else:
-		cell_number_ids = e.getCellSet('AllCells')
+
 	if not genes:
 		genes = [e.geneName(gid) for gid in range(e.geneCount())]
-	expression = np.zeros([len(genes), len(list(cell_number_ids))])
+	expression = np.zeros([len(genes), len(list(cells))])
 	for idx, gene in enumerate(genes):
-		expression[idx] = list(e.getCellsExpressionCountFromGeneName(cell_number_ids, gene))
+		expression[idx] = list(e.getCellsExpressionCountFromGeneName(cells, gene))
 	if not unexpressed_genes:
 		genes_expressed = expression.any(axis=1)
 		genes = [genes[idx] for idx, val in enumerate(genes_expressed) if val]
@@ -89,7 +81,7 @@ def parse_exp_data(cells=(), genes=(), limit=0, unexpressed_genes=False):
 		genes = genes[:limit]
 		expression = expression[:limit]
 	cell_data = []
-	for idx, cid in enumerate(cell_number_ids):
+	for idx, cid in enumerate(cells):
 		cell_data.append({
 			"cellname": e.getCellMetaDataValue(cid, "CellName"),
 			"e": list(expression[:, idx]),
@@ -100,6 +92,15 @@ def parse_exp_data(cells=(), genes=(), limit=0, unexpressed_genes=False):
 		"nonzero_gene_count": int(np.sum(expression.any(axis=1)))
 	}
 
+def toCellIDsCpp(cells=()):
+	e = ExpressionMatrix(application.config["DATA_DIR"])
+	cell_number_ids = CellIdList()
+	if cells:
+		for cell_id in cells:
+			cell_number_ids.append(e.cellIdFromString(cell_id))
+	else:
+		cell_number_ids = e.getCellSet('AllCells')
+	return cell_number_ids
 
 def make_payload(data, errormessage="", errorcode=200):
 	error = False
@@ -135,9 +136,9 @@ def parse_querystring(qs):
 			except ValueError:
 				raise QueryStringError("Error: min,max format required for range for key {}, got {}".format(key, value))
 			if min == "*":
-				min = "-inf"
+				min = None
 			if max == "*":
-				max = "inf"
+				max = None
 			try:
 				query[key]["query"] = {
 					"min": convert_variable(query[key]["type"], min),
@@ -160,6 +161,7 @@ def get_metadata_ranges(schema, metadata):
 				"min": None,
 				"max": None
 			}
+
 	for cell in metadata:
 		for s in schema:
 			try:
@@ -178,7 +180,9 @@ def get_metadata_ranges(schema, metadata):
 			except KeyError:
 				pass
 			except TypeError:
-				print(options[s]["range"])
+				pass
+
+
 	return options
 
 
@@ -188,9 +192,9 @@ class QueryStringError(Exception):
 
 def convert_variable(datatype, variable):
 	try:
-		if datatype == "int":
+		if variable and datatype == "int":
 			variable = int(variable)
-		elif datatype == "float":
+		elif variable and datatype == "float":
 			variable = float(variable)
 		return variable
 	except ValueError:
@@ -358,7 +362,7 @@ class MetadataAPI(Resource):
 	def post(self):
 		args = self.parser.parse_args()
 		cell_list = args.celllist
-		metadata = parse_metadata(cell_list)
+		metadata = parse_metadata(toCellIDsCpp(cell_list))
 		if cell_list and len(metadata['cell_metadata']) < len(cell_list):
 			return make_payload([], "Some cell ids not available", 400)
 		return make_payload(metadata)
@@ -413,7 +417,7 @@ class ExpressionAPI(Resource):
 		args = self.parser.parse_args()
 		unexpressed_genes = args.get('include_unexpressed_genes', False)
 
-		data = parse_exp_data(limit=40, unexpressed_genes=unexpressed_genes)
+		data = parse_exp_data(cells=toCellIDsCpp(), limit=40, unexpressed_genes=unexpressed_genes)
 		return make_payload(data)
 
 	@swagger.doc({
@@ -475,7 +479,7 @@ class ExpressionAPI(Resource):
 		unexpressed_genes = args.get('include_unexpressed_genes', False)
 		if not (cell_list) and not (gene_list):
 			return make_payload([], "must include celllist and/or genelist parameter", 400)
-		data = parse_exp_data(cell_list, gene_list, unexpressed_genes=unexpressed_genes)
+		data = parse_exp_data(toCellIDsCpp(cell_list), gene_list, unexpressed_genes=unexpressed_genes)
 		if cell_list and len(data['cells']) < len(cell_list):
 			return make_payload([], "Some cell ids not available", 400)
 		if gene_list and len(data['genes']) < len(gene_list):
@@ -641,28 +645,41 @@ class CellsAPI(Resource):
 		except QueryStringError as e:
 			return make_payload({}, str(e), 400)
 		schema = parse_schema(os.path.join(application.config["SCHEMAS_DIR"], "test_data_schema.json"))
-		metadata = parse_metadata()['cell_metadata']
+		metadata = parse_metadata(toCellIDsCpp())['cell_metadata']
 		bad_metadata_count = 0
 		keptcells = []
+
+
 		if len(qs):
+			run = randint(0, 1000)
 			error = False
-			for cell in metadata:
-				for key, value in qs.items():
-					try:
-						if value["variabletype"] == 'categorical':
-							if cell[key] not in value["query"]:
-								break
-						elif value["variabletype"] == 'continuous':
-							numerical_variable = convert_variable(value["type"], cell[key])
-							if not (value["query"]['min'] < numerical_variable < value["query"]['max']):
-								break
-					except KeyError:
-						bad_metadata_count += 1
-				else:
-					keptcells.append(cell)
+			filters = []
+			# TODO catch errors
+			for key, value in qs.items():
+				if value["variabletype"] == 'categorical':
+					for idx, item in enumerate(value["query"]):
+						queryval = escape(item)
+						filtername = "{}_{}_{}".format(key, run, idx)
+						e.createCellSetUsingMetaData(filtername, key, queryval)
+						filters.append(filtername)
+				elif value["variabletype"] == 'continuous':
+					filtername = "{}_{}".format(key, run)
+					filters.append(filtername)
+					if value["query"]["min"] and value["query"]["max"]:
+						e.createCellSetUsingNumericMetaDataBetween(filtername, key, value["query"]["min"], value["query"]["max"])
+					elif value["query"]["min"]:
+						e.createCellSetUsingNumericMetaDataGreaterThan(filtername, key, value["query"]["min"])
+					elif value["query"]["max"]:
+						e.createCellSetUsingNumericMetaDataLessThan(filtername, key, value["query"]["max"])
+					else:
+						filters.pop(filtername)
+			output_cellset = "out_{}".format(run)
+			e.createCellSetIntersection(",".join(filters), output_cellset)
+			# TODO write converter for cell ids to cellid list
+			keptcells = parse_metadata(e.getCellSet(output_cellset))["cell_metadata"]
+
 		else:
 			keptcells = metadata
-
 		ranges = get_metadata_ranges(schema, keptcells)
 		data["cellcount"] = len(keptcells)
 		if data["cellcount"] <= REACTIVE_LIMIT:
@@ -755,7 +772,7 @@ class InitializeAPI(Resource):
 	})
 	def get(self):
 		schema = parse_schema(os.path.join(application.config["SCHEMAS_DIR"], "test_data_schema.json"))
-		metadata = parse_metadata()["cell_metadata"]
+		metadata = parse_metadata(toCellIDsCpp())["cell_metadata"]
 
 		options = get_metadata_ranges(schema, metadata)
 		return make_payload({"schema": schema, "options": options, "cellcount": len(metadata)})
