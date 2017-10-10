@@ -652,9 +652,9 @@ class CellsAPI(Resource):
 
 		if len(qs):
 			run = randint(0, 1000)
+			# TODO catch errors
 			error = False
 			filters = []
-			# TODO catch errors
 			for key, value in qs.items():
 				if value["variabletype"] == 'categorical':
 					for idx, item in enumerate(value["query"]):
@@ -675,8 +675,11 @@ class CellsAPI(Resource):
 						filters.pop(filtername)
 			output_cellset = "out_{}".format(run)
 			e.createCellSetIntersection(",".join(filters), output_cellset)
-			# TODO write converter for cell ids to cellid list
 			keptcells = parse_metadata(e.getCellSet(output_cellset))["cell_metadata"]
+			# IDEA it may be worth keeping the cell sets for each individual categorical data set in
+			# denormalized form for quicker access?
+			for cellset in filters:
+				e.removeCellSet(cellset)
 
 		else:
 			keptcells = metadata
