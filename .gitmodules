@@ -1,0 +1,3 @@
+[submodule "ExpressionMatrix2"]
+	path = ExpressionMatrix2
+	url = https://github.com/chanzuckerberg/ExpressionMatrix2.git
