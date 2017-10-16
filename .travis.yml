@@ -1,0 +1,17 @@
+language: python
+python:
+- 3.6
+addons:
+  apt:
+    packages:
+    - jq
+    - moreutils
+    - gettext
+install:
+- pip install -r requirements.txt
+- pip install nose
+- python3 application.py &
+script:
+- nosetests
+after_success:
+- bash <(curl -s https://codecov.io/bash)
