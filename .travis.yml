@@ -9,7 +9,13 @@ addons:
     - jq
     - moreutils
     - gettext
+before_install:
+  - sudo apt-get update -q
+  - sudo apt-get install libboost-all-dev python3-all-dev libhdf5-dev libhdf5-cpp-11 -y
 install:
+- cd ExpressionMatrix2/Release-ubuntu16-python3
+- make
+- cd ../..
 - pip install -r requirements.txt
 - pip install nose
 - python3 application.py &
