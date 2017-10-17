@@ -69,7 +69,6 @@ class EndPoints(unittest.TestCase):
 	def test_heatmap_post_genelist_celllist(self):
 		url = "{base}{endpoint}".format(base=self.url_base, endpoint="expression")
 		result = self.session.post(url, data={"celllist": ["1001000012.C3"], "genelist": ["AASS"]})
-		print(result.status_code)
 		assert result.status_code == 200
 		result_json = result.json()
 		assert 'data' in result_json

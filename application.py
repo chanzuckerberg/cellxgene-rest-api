@@ -22,14 +22,22 @@ GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", default=False)
 GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", default=False)
 SECRET_KEY = os.environ.get("SECRET_KEY", default=None)
 if not SECRET_KEY:
-    raise ValueError("No secret key set for Flask application")
+	raise ValueError("No secret key set for Flask application")
 
 
 application.config.from_pyfile('app.cfg', silent=True)
 application.config.update(
-	GOOGLE_CLIENT_ID = GOOGLE_CLIENT_ID,
-	GOOGLE_CLIENT_SECRET=  GOOGLE_CLIENT_SECRET,
-    SECRET_KEY = SECRET_KEY
+	GOOGLE_CLIENT_ID=GOOGLE_CLIENT_ID,
+	GOOGLE_CLIENT_SECRET= GOOGLE_CLIENT_SECRET,
+	SECRET_KEY=SECRET_KEY
+)
+dir_path = os.path.dirname(os.path.realpath(__file__))
+application.config.update(
+	GBM_DIR=os.path.join(dir_path, application.config["GBM_DIR"]),
+	SCRATCH_DIR=os.path.join(dir_path, application.config["SCRATCH_DIR"]),
+	DATA_DIR=os.path.join(dir_path, application.config["DATA_DIR"]),
+	SCHEMAS_DIR=os.path.join(dir_path, application.config["SCHEMAS_DIR"]),
+	EM2_DIR=os.path.join(dir_path, application.config["EM2_DIR"]),
 )
 
 api = Api(application, api_version='0.1', api_spec_url='/api/swagger')
@@ -38,6 +46,8 @@ blueprint = make_google_blueprint(
 	client_secret=application.config["GOOGLE_CLIENT_SECRET"],
 	scope=["profile", "email"]
 )
+
+
 application.register_blueprint(blueprint, url_prefix="/login")
 
 sys.path.insert(0, application.config["EM2_DIR"])
@@ -46,10 +56,10 @@ from ExpressionMatrix2 import ExpressionMatrix, CellIdList, invalidCellId
 graph_parser = reqparse.RequestParser()
 graph_parser.add_argument('cellsetname', type=str, default='AllCells', required=False, help="Named cell set")
 graph_parser.add_argument('similarpairsname', type=str, default='ExactHighInformationGenes', required=False,
-                          help="Named setof pairs")
+						  help="Named setof pairs")
 graph_parser.add_argument('similaritythreshold', type=float, required=False, default=0.3, help="Threshold between 0-1")
 graph_parser.add_argument('connectivity', type=int, required=False, default=20,
-                          help="Maximum connectivity, default is 20")
+						  help="Maximum connectivity, default is 20")
 
 metadata_parser = reqparse.RequestParser()
 metadata_parser.add_argument('celllist', type=str, action="append", required=False, help='List of cells by id')
@@ -59,7 +69,9 @@ expression_parser = reqparse.RequestParser()
 expression_parser.add_argument('celllist', type=str, action="append", required=False, help='List of cells by id')
 expression_parser.add_argument('genelist', type=str, action="append", required=False, help='List of genes by name')
 expression_parser.add_argument('include_unexpressed_genes', type=bool, required=False,
-                               help='Include genes with zero expression across cell set')
+							   help='Include genes with zero expression across cell set')
+
+
 
 
 # ---- Helper Functions -------
@@ -443,7 +455,7 @@ class ExpressionAPI(Resource):
 					"example": {
 						"celllist": ["1001000173.G8", "1001000173.D4"],
 						"genelist": ["1/2-SBSRNA4", "A1BG", "A1BG-AS1", "A1CF", "A2LD1", "A2M", "A2ML1", "A2MP1",
-						             "A4GALT"],
+									 "A4GALT"],
 						"include_unexpressed_genes": True,
 					}
 
@@ -564,7 +576,7 @@ class GraphAPI(Resource):
 		os.chdir(application.config['SCRATCH_DIR'])
 		e = ExpressionMatrix(application.config['DATA_DIR'])
 		e.createCellGraph('AllCells', args.cellsetname, args.similarpairsname, args.similaritythreshold,
-		                  args.connectivity)
+						  args.connectivity)
 		e.computeCellGraphLayout('AllCells')
 		vertices = e.getCellGraphVertices('AllCells')
 		data = [[e.getCellMetaDataValue(v.cellId, 'CellName'), v.x(), v.y()] for v in vertices]
@@ -673,7 +685,8 @@ class CellsAPI(Resource):
 					for idx, item in enumerate(value["query"]):
 						queryval = escape(item)
 						filtername = "{}_{}_{}".format(key, run, idx)
-						e.createCellSetUsingMetaData(filtername, key, queryval)
+						print(filtername, key, queryval)
+						e.createCellSetUsingMetaData(filtername, key, queryval, False)
 						filters.append(filtername)
 				elif value["variabletype"] == 'continuous':
 					filtername = "{}_{}".format(key, run)
@@ -685,7 +698,7 @@ class CellsAPI(Resource):
 					elif value["query"]["max"]:
 						e.createCellSetUsingNumericMetaDataLessThan(filtername, key, value["query"]["max"])
 					else:
-						filters.pop(filtername)
+						filters.pop(filters.index(filtername))
 			output_cellset = "out_{}".format(run)
 			e.createCellSetIntersection(",".join(filters), output_cellset)
 			keptcells = parse_metadata(e.getCellSet(output_cellset))["cell_metadata"]
