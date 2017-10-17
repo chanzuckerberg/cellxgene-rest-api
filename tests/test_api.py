@@ -49,7 +49,6 @@ class EndPoints(unittest.TestCase):
 		assert len(result_json['data']['genes'])
 		assert len(result_json["data"]['cells']) == 1
 		assert len(result_json["data"]['cells'][0]['e'])
-		print(result_json['data']['genes'])
 		assert result_json["data"]['nonzero_gene_count']
 		result = self.session.post(url, data={"celllist": ["1001000012.C3"], "include_unexpressed_genes": True})
 		assert result.status_code == 200

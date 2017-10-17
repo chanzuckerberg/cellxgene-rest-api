@@ -1,4 +1,4 @@
-import csv, sys, os
+import sys, os
 from collections import defaultdict
 from random import randint
 from re import escape
@@ -17,8 +17,21 @@ application = Flask(__name__)
 CORS(application)
 
 REACTIVE_LIMIT = 5000
+# SECRETS
+GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", default=False)
+GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", default=False)
+SECRET_KEY = os.environ.get("SECRET_KEY", default=None)
+if not SECRET_KEY:
+    raise ValueError("No secret key set for Flask application")
+
 
 application.config.from_pyfile('app.cfg', silent=True)
+application.config.update(
+	GOOGLE_CLIENT_ID = GOOGLE_CLIENT_ID,
+	GOOGLE_CLIENT_SECRET=  GOOGLE_CLIENT_SECRET,
+    SECRET_KEY = SECRET_KEY
+)
+
 api = Api(application, api_version='0.1', api_spec_url='/api/swagger')
 blueprint = make_google_blueprint(
 	client_id=application.config["GOOGLE_CLIENT_ID"],
