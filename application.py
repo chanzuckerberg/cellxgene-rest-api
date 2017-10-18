@@ -51,7 +51,7 @@ blueprint = make_google_blueprint(
 application.register_blueprint(blueprint, url_prefix="/login")
 
 sys.path.insert(0, application.config["EM2_DIR"])
-from ExpressionMatrix2 import ExpressionMatrix, CellIdList, invalidCellId
+from ExpressionMatrix2 import ExpressionMatrix, CellIdList, invalidCellId, ClusterGraphCreationParameters
 
 graph_parser = reqparse.RequestParser()
 graph_parser.add_argument('cellsetname', type=str, default='AllCells', required=False, help="Named cell set")
@@ -582,6 +582,20 @@ class GraphAPI(Resource):
 		data = [[e.getCellMetaDataValue(v.cellId, 'CellName'), v.x(), v.y()] for v in vertices]
 		return make_payload(data)
 
+class ClusterAPI(Resource):
+	def get(self):
+		# Retrieve cluster
+		pass
+	
+	def post(self):
+		# Create cluster
+		params =  ClusterGraphCreationParameters()
+		e = ExpressionMatrix(application.config['DATA_DIR'])
+		run = randint(0, 1000)
+		clustername = "clusters_{}".format(run)
+		e.createClusterGraph("AllCells", params, clustername)
+		return make_payload({clustername: clustername}, errorcode=201)
+
 
 class CellsAPI(Resource):
 	@swagger.doc({
@@ -813,6 +827,7 @@ api.add_resource(MetadataAPI, "/api/v0.1/metadata")
 api.add_resource(ExpressionAPI, "/api/v0.1/expression")
 api.add_resource(GraphAPI, "/api/v0.1/graph")
 api.add_resource(InitializeAPI, "/api/v0.1/initialize")
+api.add_resource(CellsAPI, "/api/v0.1/cells")
 api.add_resource(CellsAPI, "/api/v0.1/cells")
 
 if __name__ == "__main__":
