@@ -24,11 +24,10 @@ SECRET_KEY = os.environ.get("SECRET_KEY", default=None)
 if not SECRET_KEY:
 	raise ValueError("No secret key set for Flask application")
 
-
 application.config.from_pyfile('app.cfg', silent=True)
 application.config.update(
 	GOOGLE_CLIENT_ID=GOOGLE_CLIENT_ID,
-	GOOGLE_CLIENT_SECRET= GOOGLE_CLIENT_SECRET,
+	GOOGLE_CLIENT_SECRET=GOOGLE_CLIENT_SECRET,
 	SECRET_KEY=SECRET_KEY
 )
 dir_path = os.path.dirname(os.path.realpath(__file__))
@@ -40,13 +39,12 @@ application.config.update(
 	EM2_DIR=os.path.join(dir_path, application.config["EM2_DIR"]),
 )
 
-api = Api(application, api_version='0.1', api_spec_url='/api/swagger')
+api = Api(application, api_version='0.1',  produces=["application/json"], title="cellxgene rest api", api_spec_url='/api/swagger', description='A API connecting ExpressionMatrix2 clustering algorithm to cellxgene')
 blueprint = make_google_blueprint(
 	client_id=application.config["GOOGLE_CLIENT_ID"],
 	client_secret=application.config["GOOGLE_CLIENT_SECRET"],
 	scope=["profile", "email"]
 )
-
 
 application.register_blueprint(blueprint, url_prefix="/login")
 
@@ -56,10 +54,10 @@ from ExpressionMatrix2 import ExpressionMatrix, CellIdList, invalidCellId, Clust
 graph_parser = reqparse.RequestParser()
 graph_parser.add_argument('cellsetname', type=str, default='AllCells', required=False, help="Named cell set")
 graph_parser.add_argument('similarpairsname', type=str, default='ExactHighInformationGenes', required=False,
-						  help="Named setof pairs")
+                          help="Named setof pairs")
 graph_parser.add_argument('similaritythreshold', type=float, required=False, default=0.3, help="Threshold between 0-1")
 graph_parser.add_argument('connectivity', type=int, required=False, default=20,
-						  help="Maximum connectivity, default is 20")
+                          help="Maximum connectivity, default is 20")
 
 metadata_parser = reqparse.RequestParser()
 metadata_parser.add_argument('celllist', type=str, action="append", required=False, help='List of cells by id')
@@ -69,12 +67,10 @@ expression_parser = reqparse.RequestParser()
 expression_parser.add_argument('celllist', type=str, action="append", required=False, help='List of cells by id')
 expression_parser.add_argument('genelist', type=str, action="append", required=False, help='List of genes by name')
 expression_parser.add_argument('include_unexpressed_genes', type=bool, required=False,
-							   help='Include genes with zero expression across cell set')
+                               help='Include genes with zero expression across cell set')
 
 cluster_parser = reqparse.RequestParser()
 cluster_parser.add_argument('clustername', type=str, required=True, help="Name of cell graph")
-
-
 
 
 # ---- Helper Functions -------
@@ -120,6 +116,7 @@ def parse_exp_data(cells, genes=(), limit=0, unexpressed_genes=False):
 		"nonzero_gene_count": int(np.sum(expression.any(axis=1)))
 	}
 
+
 def toCellIDsCpp(cells=()):
 	e = ExpressionMatrix(application.config["DATA_DIR"])
 	cell_number_ids = CellIdList()
@@ -129,6 +126,7 @@ def toCellIDsCpp(cells=()):
 	else:
 		cell_number_ids = e.getCellSet('AllCells')
 	return cell_number_ids
+
 
 def make_payload(data, errormessage="", errorcode=200):
 	error = False
@@ -177,6 +175,7 @@ def parse_querystring(qs):
 					"Error: expected type {} for key {}, got {}".format(query[key]["type"], key, value))
 	return query
 
+
 def get_metadata_ranges(schema, metadata):
 	options = {}
 	for s in schema:
@@ -209,7 +208,6 @@ def get_metadata_ranges(schema, metadata):
 				pass
 			except TypeError:
 				pass
-
 
 	return options
 
@@ -279,6 +277,7 @@ class MetadataAPI(Resource):
 
 	@swagger.doc({
 		'summary': 'Json document containing the metadata for list of cells',
+		'tags': ['metadata'],
 		'parameters': [
 			{
 				'name': 'body',
@@ -402,6 +401,7 @@ class ExpressionAPI(Resource):
 
 	@swagger.doc({
 		'summary': 'Json with gene list and expression data by cell, limited to first 40 cells',
+		'tags': ['expression'],
 		'parameters': [
 			{
 				'name': 'include_unexpressed_genes',
@@ -450,6 +450,7 @@ class ExpressionAPI(Resource):
 
 	@swagger.doc({
 		'summary': 'Json with gene list and expression data by cell',
+		'tags': ['expression'],
 		'parameters': [
 			{
 				'name': 'body',
@@ -458,7 +459,7 @@ class ExpressionAPI(Resource):
 					"example": {
 						"celllist": ["1001000173.G8", "1001000173.D4"],
 						"genelist": ["1/2-SBSRNA4", "A1BG", "A1BG-AS1", "A1CF", "A2LD1", "A2M", "A2ML1", "A2MP1",
-									 "A4GALT"],
+						             "A4GALT"],
 						"include_unexpressed_genes": True,
 					}
 
@@ -521,6 +522,7 @@ class GraphAPI(Resource):
 
 	@swagger.doc({
 		'summary': 'computes the graph for a named cell set',
+		'tags': ['graph'],
 		'parameters': [
 			{
 				'name': 'cellsetname',
@@ -581,11 +583,12 @@ class GraphAPI(Resource):
 		run = randint(0, 1000)
 		graphname = "cellgraph_{}".format(run)
 		e.createCellGraph(graphname, args.cellsetname, args.similarpairsname, args.similaritythreshold,
-						  args.connectivity)
+		                  args.connectivity)
 		e.computeCellGraphLayout(graphname)
 		vertices = e.getCellGraphVertices(graphname)
 		data = [[e.getCellMetaDataValue(v.cellId, 'CellName'), v.x(), v.y()] for v in vertices]
 		return make_payload(data)
+
 
 class ClusterAPI(Resource):
 	def get(self):
@@ -611,10 +614,12 @@ class ClusterAPI(Resource):
 		return make_payload({clustername: clustername}, errorcode=201)
 
 
-
 class CellsAPI(Resource):
 	@swagger.doc({
 		'summary': 'filter based on metadata fields to get a subset cells, expression data, and metadata',
+		'tags': ['cells'],
+		'description': "Cells takes query parameters definied in the schema retrieved from the /initialize enpoint. <br>For categorical metadata keys filter based on `key[]=value` <br>"
+		               " For continous  metadata keys filter by `key=min,max`<br> Either value can be replaced by a \*. To have only a minimum value `key=min,\*`  To have only a maximum value `key=\*,max`",
 		'parameters': [],
 		'responses': {
 			'200': {
@@ -703,7 +708,6 @@ class CellsAPI(Resource):
 		bad_metadata_count = 0
 		keptcells = []
 
-
 		if len(qs):
 			run = randint(0, 1000)
 			# TODO catch errors
@@ -721,7 +725,8 @@ class CellsAPI(Resource):
 					filtername = "{}_{}".format(key, run)
 					filters.append(filtername)
 					if value["query"]["min"] and value["query"]["max"]:
-						e.createCellSetUsingNumericMetaDataBetween(filtername, key, value["query"]["min"], value["query"]["max"])
+						e.createCellSetUsingNumericMetaDataBetween(filtername, key, value["query"]["min"],
+						                                           value["query"]["max"])
 					elif value["query"]["min"]:
 						e.createCellSetUsingNumericMetaDataGreaterThan(filtername, key, value["query"]["min"])
 					elif value["query"]["max"]:
@@ -753,6 +758,7 @@ class CellsAPI(Resource):
 class InitializeAPI(Resource):
 	@swagger.doc({
 		'summary': 'get metadata schema, ranges for values, and cell count to initialize cellxgene app',
+		'tags': ['initialize'],
 		'parameters': [],
 		'responses': {
 			'200': {
@@ -834,8 +840,6 @@ class InitializeAPI(Resource):
 
 		options = get_metadata_ranges(schema, metadata)
 		return make_payload({"schema": schema, "options": options, "cellcount": len(metadata)})
-
-
 
 
 api.add_resource(MetadataAPI, "/api/v0.1/metadata")
