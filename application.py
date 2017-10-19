@@ -71,6 +71,9 @@ expression_parser.add_argument('genelist', type=str, action="append", required=F
 expression_parser.add_argument('include_unexpressed_genes', type=bool, required=False,
 							   help='Include genes with zero expression across cell set')
 
+cluster_parser = reqparse.RequestParser()
+cluster_parser.add_argument('clustername', type=str, required=True, help="Name of cell graph")
+
 
 
 
@@ -573,28 +576,40 @@ class GraphAPI(Resource):
 	})
 	def get(self):
 		args = self.parser.parse_args()
-		os.chdir(application.config['SCRATCH_DIR'])
+		os.chdir(application.config['DATA_DIR'])
 		e = ExpressionMatrix(application.config['DATA_DIR'])
-		e.createCellGraph('AllCells', args.cellsetname, args.similarpairsname, args.similaritythreshold,
+		run = randint(0, 1000)
+		graphname = "cellgraph_{}".format(run)
+		e.createCellGraph(graphname, args.cellsetname, args.similarpairsname, args.similaritythreshold,
 						  args.connectivity)
-		e.computeCellGraphLayout('AllCells')
-		vertices = e.getCellGraphVertices('AllCells')
+		e.computeCellGraphLayout(graphname)
+		vertices = e.getCellGraphVertices(graphname)
 		data = [[e.getCellMetaDataValue(v.cellId, 'CellName'), v.x(), v.y()] for v in vertices]
 		return make_payload(data)
 
 class ClusterAPI(Resource):
 	def get(self):
 		# Retrieve cluster
-		pass
-	
-	def post(self):
-		# Create cluster
-		params =  ClusterGraphCreationParameters()
-		e = ExpressionMatrix(application.config['DATA_DIR'])
 		run = randint(0, 1000)
+		graphname = "cellgraph_{}".format(run)
+		e = ExpressionMatrix(application.config['DATA_DIR'])
+		args = graph_parser.parse_args()
+		e.createCellGraph(graphname, args.cellsetname, args.similarpairsname, args.similaritythreshold,
+		                  args.connectivity)
 		clustername = "clusters_{}".format(run)
-		e.createClusterGraph("AllCells", params, clustername)
+		params = ClusterGraphCreationParameters()
+		e.createClusterGraph(graphname, params, clustername)
+		clusters = e.getClusterGraphVertices(clustername)
+		clusters = [i for i in clusters]
+		cells = {}
+		for i in clusters:
+			cells[i] = [e.getCellMetaDataValue(cid, "CellName") for cid in e.getClusterCells(clustername, i)]
+		# TODO calculate expression values for these
+		# TODO does the graph really need to be created each time?
+		# TODO parameterize graph with cell sets?
+
 		return make_payload({clustername: clustername}, errorcode=201)
+
 
 
 class CellsAPI(Resource):
@@ -828,7 +843,7 @@ api.add_resource(ExpressionAPI, "/api/v0.1/expression")
 api.add_resource(GraphAPI, "/api/v0.1/graph")
 api.add_resource(InitializeAPI, "/api/v0.1/initialize")
 api.add_resource(CellsAPI, "/api/v0.1/cells")
-api.add_resource(CellsAPI, "/api/v0.1/cells")
+api.add_resource(ClusterAPI, "/api/v0.1/cluster")
 
 if __name__ == "__main__":
 	application.run(host='0.0.0.0', debug=True)
