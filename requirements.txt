@@ -12,6 +12,7 @@ itsdangerous==0.24
 Jinja2==2.9.6
 lazy==1.3
 MarkupSafe==1.0
+numpy==1.12.1
 oauthlib==2.0.2
 py==1.4.34
 pytest==3.2.1

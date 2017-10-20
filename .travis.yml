@@ -10,17 +10,19 @@ addons:
     - moreutils
     - gettext
 before_install:
-  - sudo apt-get update -q
-  - sudo apt-get install libboost-all-dev python3-all-dev libhdf5-dev libhdf5-cpp-11 -y
+  - echo
 install:
-- cd ExpressionMatrix2/Release-ubuntu16-python3
-- make
-- cd ../..
-- pip install -r requirements.txt
-- pip install nose
-- python3 application.py &
-- while ! nc -z localhost 5000; do echo "Waiting for server..."; sleep 1; done
+- pip install nose requests awscli
+- make build
+- docker run cellxgene python3 cellxgene-rest-api/application.py &
+- for i in {1..90}; do if nc -z localhost 5000; then break; else echo "Waiting for server..."; sleep 1; fi; done
 script:
 - nosetests
 after_success:
 - bash <(curl -s https://codecov.io/bash)
+deploy:
+  - provider: script
+    script: make deploy
+    skip_cleanup: true
+    on:
+      branch: master
