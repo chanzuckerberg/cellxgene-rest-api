@@ -14,7 +14,7 @@ before_install:
 install:
 - pip install nose requests awscli
 - make build
-- docker run cellxgene python3 cellxgene-rest-api/application.py &
+- docker run -p 5000:5000 cellxgene python3 cellxgene-rest-api/application.py &
 - for i in {1..90}; do if nc -z localhost 5000; then break; else echo "Waiting for server..."; sleep 1; fi; done
 script:
 - nosetests
