@@ -21,7 +21,6 @@ REACTIVE_LIMIT = 5000
 GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", default=False)
 GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", default=False)
 SECRET_KEY = os.environ.get("SECRET_KEY", default=None)
-print("SK", SECRET_KEY)
 if not SECRET_KEY:
 	raise ValueError("No secret key set for Flask application")
 
