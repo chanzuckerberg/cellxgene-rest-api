@@ -21,6 +21,7 @@ REACTIVE_LIMIT = 5000
 GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", default=False)
 GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", default=False)
 SECRET_KEY = os.environ.get("SECRET_KEY", default=None)
+print("SK", SECRET_KEY)
 if not SECRET_KEY:
 	raise ValueError("No secret key set for Flask application")
 
@@ -79,7 +80,7 @@ def stringstringpairs2dict(ssp):
 
 
 def parse_metadata(cells):
-	e = ExpressionMatrix(application.config["DATA_DIR"])
+	e = ExpressionMatrix(application.config["DATA_DIR"], True)
 
 	mdict = []
 	if invalidCellId not in cells:
@@ -89,7 +90,7 @@ def parse_metadata(cells):
 
 
 def parse_exp_data(cells, genes=(), limit=0, unexpressed_genes=False):
-	e = ExpressionMatrix(application.config["DATA_DIR"])
+	e = ExpressionMatrix(application.config["DATA_DIR"], True)
 
 	if not genes:
 		genes = [e.geneName(gid) for gid in range(e.geneCount())]
@@ -118,7 +119,7 @@ def parse_exp_data(cells, genes=(), limit=0, unexpressed_genes=False):
 
 
 def toCellIDsCpp(cells=()):
-	e = ExpressionMatrix(application.config["DATA_DIR"])
+	e = ExpressionMatrix(application.config["DATA_DIR"], True)
 	cell_number_ids = CellIdList()
 	if cells:
 		for cell_id in cells:
@@ -579,7 +580,7 @@ class GraphAPI(Resource):
 	def get(self):
 		args = self.parser.parse_args()
 		os.chdir(application.config['DATA_DIR'])
-		e = ExpressionMatrix(application.config['DATA_DIR'])
+		e = ExpressionMatrix(application.config['DATA_DIR'], True)
 		run = randint(0, 1000)
 		graphname = "cellgraph_{}".format(run)
 		e.createCellGraph(graphname, args.cellsetname, args.similarpairsname, args.similaritythreshold,
@@ -595,7 +596,7 @@ class ClusterAPI(Resource):
 		# Retrieve cluster
 		run = randint(0, 1000)
 		graphname = "cellgraph_{}".format(run)
-		e = ExpressionMatrix(application.config['DATA_DIR'])
+		e = ExpressionMatrix(application.config['DATA_DIR'], True)
 		args = graph_parser.parse_args()
 		e.createCellGraph(graphname, args.cellsetname, args.similarpairsname, args.similaritythreshold,
 		                  args.connectivity)
@@ -690,7 +691,7 @@ class CellsAPI(Resource):
 	def get(self):
 		# TODO Allow random downsampling
 
-		e = ExpressionMatrix(application.config['DATA_DIR'])
+		e = ExpressionMatrix(application.config['DATA_DIR'], True)
 		data = {
 			"reactive": False,
 			"cellids": [],
