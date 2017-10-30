@@ -145,18 +145,14 @@ def parse_querystring(qs):
 	schema = parse_schema(os.path.join(application.config["SCHEMAS_DIR"], "test_data_schema.json"))
 	query = {}
 	for key in qs:
-		value = None
-		if key.endswith("[]"):
-			value = qs.getlist(key)
-			key = key[:-2]
-		else:
-			value = qs[key]
+		value = qs.getlist(key)
 		if key not in schema:
 			raise QueryStringError("Error: key {} not in metadata schema".format(key))
 		query[key] = schema[key]
 		if query[key]["variabletype"] == "categorical":
 			query[key]["query"] = convert_variable(query[key]["variabletype"], value)
 		elif query[key]["variabletype"] == "continuous":
+			value = value[0]
 			try:
 				min, max = value.split(",")
 			except ValueError:
@@ -580,7 +576,7 @@ class GraphAPI(Resource):
 		args = self.parser.parse_args()
 		os.chdir(application.config['DATA_DIR'])
 		e = ExpressionMatrix(application.config['DATA_DIR'])
-		run = randint(0, 1000)
+		run = randint(0, 10000)
 		graphname = "cellgraph_{}".format(run)
 		e.createCellGraph(graphname, args.cellsetname, args.similarpairsname, args.similaritythreshold,
 		                  args.connectivity)
@@ -593,7 +589,7 @@ class GraphAPI(Resource):
 class ClusterAPI(Resource):
 	def get(self):
 		# Retrieve cluster
-		run = randint(0, 1000)
+		run = randint(0, 10000)
 		graphname = "cellgraph_{}".format(run)
 		e = ExpressionMatrix(application.config['DATA_DIR'])
 		args = graph_parser.parse_args()
@@ -709,18 +705,23 @@ class CellsAPI(Resource):
 		keptcells = []
 
 		if len(qs):
-			run = randint(0, 1000)
+			run = randint(0, 10000)
 			# TODO catch errors
 			error = False
 			filters = []
 			for key, value in qs.items():
 				if value["variabletype"] == 'categorical':
+					category_filter = []
 					for idx, item in enumerate(value["query"]):
 						queryval = escape(item)
 						filtername = "{}_{}_{}".format(key, run, idx)
-						print(filtername, key, queryval)
 						e.createCellSetUsingMetaData(filtername, key, queryval, False)
-						filters.append(filtername)
+						category_filter.append(filtername)
+					category_output_filter = "{}_out_{}".format(key, run)
+					e.createCellSetUnion(",".join(category_filter), category_output_filter)
+					filters.append(category_output_filter)
+					for cellset in category_filter:
+						e.removeCellSet(cellset)
 				elif value["variabletype"] == 'continuous':
 					filtername = "{}_{}".format(key, run)
 					filters.append(filtername)
