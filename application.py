@@ -614,7 +614,7 @@ class CellsAPI(Resource):
 	@swagger.doc({
 		'summary': 'filter based on metadata fields to get a subset cells, expression data, and metadata',
 		'tags': ['cells'],
-		'description': "Cells takes query parameters definied in the schema retrieved from the /initialize enpoint. <br>For categorical metadata keys filter based on `key[]=value` <br>"
+		'description': "Cells takes query parameters definied in the schema retrieved from the /initialize enpoint. <br>For categorical metadata keys filter based on `key=value` <br>"
 		               " For continous  metadata keys filter by `key=min,max`<br> Either value can be replaced by a \*. To have only a minimum value `key=min,\*`  To have only a maximum value `key=\*,max`",
 		'parameters': [],
 		'responses': {
