@@ -145,6 +145,8 @@ def parse_querystring(qs):
 	schema = parse_schema(os.path.join(application.config["SCHEMAS_DIR"], "test_data_schema.json"))
 	query = {}
 	for key in qs:
+		if key == "_nograph":
+			continue
 		value = qs.getlist(key)
 		if key not in schema:
 			raise QueryStringError("Error: key {} not in metadata schema".format(key))
@@ -616,7 +618,12 @@ class CellsAPI(Resource):
 		'tags': ['cells'],
 		'description': "Cells takes query parameters definied in the schema retrieved from the /initialize enpoint. <br>For categorical metadata keys filter based on `key=value` <br>"
 		               " For continous  metadata keys filter by `key=min,max`<br> Either value can be replaced by a \*. To have only a minimum value `key=min,\*`  To have only a maximum value `key=\*,max`",
-		'parameters': [],
+		'parameters': [{
+				'name': '_nograph',
+				'description': "Do not calculate and send back graph (graph is sent by default)",
+				'in': 'path',
+				'type': 'boolean',
+			}],
 		'responses': {
 			'200': {
 				'description': 'initialization data for UI',
@@ -696,6 +703,10 @@ class CellsAPI(Resource):
 			"ranges": {}
 		}
 		try:
+			args = request.args
+			nograph = False
+			if "_nograph" in args:
+				nograph = bool(args["_nograph"])
 			qs = parse_querystring(request.args)
 		except QueryStringError as e:
 			return make_payload({}, str(e), 400)
@@ -703,9 +714,9 @@ class CellsAPI(Resource):
 		metadata = parse_metadata(toCellIDsCpp())['cell_metadata']
 		bad_metadata_count = 0
 		keptcells = []
-
+		run = randint(0, 10000)
+		output_cellset = "out_{}".format(run)
 		if len(qs):
-			run = randint(0, 10000)
 			# TODO catch errors
 			error = False
 			filters = []
@@ -734,18 +745,31 @@ class CellsAPI(Resource):
 						e.createCellSetUsingNumericMetaDataLessThan(filtername, key, value["query"]["max"])
 					else:
 						filters.pop(filters.index(filtername))
-			output_cellset = "out_{}".format(run)
 			e.createCellSetIntersection(",".join(filters), output_cellset)
 			keptcells = parse_metadata(e.getCellSet(output_cellset))["cell_metadata"]
-			# IDEA it may be worth keeping the cell sets for each individual categorical data set in
-			# denormalized form for quicker access?
 			for cellset in filters:
 				e.removeCellSet(cellset)
-
 		else:
 			keptcells = metadata
 		ranges = get_metadata_ranges(schema, keptcells)
 		data["cellcount"] = len(keptcells)
+		graph = None
+		if not nograph:
+			default_graph_params = {
+				"similarpairsname": "ExactHighInformationGenes",
+				"similaritythreshold": 0.3,
+				"connectivity": 20,
+			}
+			os.chdir(application.config['DATA_DIR'])
+			graphname = "cellgraph_{}".format(run)
+			e.createCellGraph(graphname, output_cellset, default_graph_params["similarpairsname"], default_graph_params["similaritythreshold"],
+			                  default_graph_params["connectivity"])
+			e.computeCellGraphLayout(graphname)
+			vertices = e.getCellGraphVertices(graphname)
+			graph = [[e.getCellMetaDataValue(v.cellId, 'CellName'), v.x(), v.y()] for v in vertices]
+
+		e.removeCellSet(output_cellset)
+
 		if data["cellcount"] <= REACTIVE_LIMIT:
 			data["reactive"] = True
 			data["metadata"] = keptcells
@@ -753,6 +777,7 @@ class CellsAPI(Resource):
 			data["ranges"] = ranges
 			# data["expression"] = parse_exp_data2(data["cellids"])
 			data["badmetadatacount"] = bad_metadata_count
+			data["graph"] = graph
 		return make_payload(data)
 
 

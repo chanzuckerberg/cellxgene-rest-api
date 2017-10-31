@@ -93,12 +93,21 @@ class EndPoints(unittest.TestCase):
 
 	def test_cells(self):
 		url = "{base}{endpoint}?{params}".format(base=self.url_base, endpoint="cells", params="&".join(
-			["Class=Neoplastic", "ERCC_reads=150000,160000"]))
+			["Class=Neoplastic", "ERCC_reads=150000,170000"]))
 		result = self.session.get(url)
 		assert result.status_code == 200
 		result_json = result.json()
 		assert result_json["data"]["cellcount"] > 0
-	
+		assert len(result_json["data"]["graph"])
+
+	def test_cells_nograph (self):
+		url = "{base}{endpoint}?{params}".format(base=self.url_base, endpoint="cells", params="&".join(
+			["Class=Neoplastic", "ERCC_reads=150000,170000", "_nograph=True"]))
+		result = self.session.get(url)
+		result_json = result.json()
+		assert result.status_code == 200
+		assert result_json["data"]["graph"] is None
+
 	def test_cells_failure(self):
 		url = "{base}{endpoint}?{params}".format(base=self.url_base, endpoint="cells", params="&".join(
 			["Class=Neoplastic", "ERCC_reads=a,160000"]))
