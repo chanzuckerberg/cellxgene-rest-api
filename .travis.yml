@@ -14,11 +14,14 @@ before_install:
   - echo
 install:
 - ls -la ..
-- curl -o ../ecs-cli "https://s3.amazonaws.com/amazon-ecs-cli/ecs-cli-linux-amd64-latest"
-- echo "$(curl -s https://s3.amazonaws.com/amazon-ecs-cli/ecs-cli-linux-amd64-latest.md5) ../ecs-cli" | md5sum -c -
-- ls -la ..
-- chmod +x ../ecs-cli
-- ../ecs-cli --version
+- travis_home=`pwd`
+- curl -o $travis_home/ecs-cli "https://s3.amazonaws.com/amazon-ecs-cli/ecs-cli-linux-amd64-latest"
+- echo "$(curl -s https://s3.amazonaws.com/amazon-ecs-cli/ecs-cli-linux-amd64-latest.md5) $travis_home/ecs-cli" | md5sum -c -
+- chmod +x $travis_home/ecs-cli
+- export PATH=$PATH:$travis_home
+- echo $PATH
+- ls $travis_home
+- ecs-cli --version
 - pip install nose requests awscli
 - make build
 - docker run -p 5000:5000 cellxgene python3 cellxgene-rest-api/application.py &

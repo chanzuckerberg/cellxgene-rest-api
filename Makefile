@@ -7,3 +7,5 @@ build:
 deploy:
 	eval $$(aws ecr get-login --region $(AWS_DEFAULT_REGION))
 	docker push "$(ECR_REGISTRY_URL)/cellxgene:latest"
+	eval $$(ecs-cli configure --region $(AWS_DEFAULT_REGION) --access-key $(AWS_ACCESS_KEY_ID) --secret-key $(AWS_SECRET_ACCESS_KEY) --cluster cellxgene_cluster)     
+	
