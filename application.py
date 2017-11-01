@@ -751,6 +751,7 @@ class CellsAPI(Resource):
 				e.removeCellSet(cellset)
 		else:
 			keptcells = metadata
+			output_cellset = "AllCells"
 		ranges = get_metadata_ranges(schema, keptcells)
 		data["cellcount"] = len(keptcells)
 		graph = None
