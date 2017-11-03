@@ -768,8 +768,8 @@ class CellsAPI(Resource):
 			e.computeCellGraphLayout(graphname)
 			vertices = e.getCellGraphVertices(graphname)
 			graph = [[e.getCellMetaDataValue(v.cellId, 'CellName'), v.x(), v.y()] for v in vertices]
-
-		e.removeCellSet(output_cellset)
+		if output_cellset != "AllCells":
+			e.removeCellSet(output_cellset)
 
 		if data["cellcount"] <= REACTIVE_LIMIT:
 			data["reactive"] = True
