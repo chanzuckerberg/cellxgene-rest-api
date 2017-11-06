@@ -1,0 +1,122 @@
+{
+	"CellName": {
+		"type": "string",
+		"variabletype": "categorical",
+		"displayname": "Name"
+	},
+	"Sample.type": {
+		"type": "string",
+		"variabletype": "categorical",
+		"displayname": "Sample Type"
+	},
+	"Selection": {
+		"type": "string",
+		"variabletype": "categorical",
+		"displayname": "Selection"
+	},
+	"Location": {
+		"type": "string",
+		"variabletype": "categorical",
+		"displayname": "Location"
+	},
+	"Sample.name": {
+		"type": "string",
+		"variabletype": "categorical",
+		"displayname": "Sample Name"
+	},
+	"Total_reads": {
+		"type": "int",
+		"variabletype": "continuous",
+		"displayname": "Total Reads"
+	},
+	"Unique_reads": {
+		"type": "int",
+		"variabletype": "continuous",
+		"displayname": "Unique Reads"
+	},
+	"Unique_reads_percent": {
+		"type": "float",
+		"variabletype": "continuous",
+		"displayname": "Unique Reads Percent"
+	},
+	"Splice_sites_total": {
+		"type": "int",
+		"variabletype": "continuous" ,
+		"displayname": "Splice Sites Total"
+	},
+	"Splice_sites_Annotated": {
+		"type": "int",
+		"variabletype": "continuous",
+		"displayname": "Splice Sites Annotated"
+	},
+	"Splice_sites_GT.AG": {
+		"type": "int",
+		"variabletype": "continuous",
+		"displayname": "Splice Sites GT/AG"
+	},
+	"Splice_sites_GC.AG": {
+		"type": "int",
+		"variabletype": "continuous",
+		"displayname": "Splice Sites GC/AG"
+	},
+	"Splice_sites_AT.AC": {
+		"type": "int",
+		"variabletype": "continuous",
+		"displayname": "Splice Sites AT/AC"
+	},
+	"Splice_sites_non_canonical": {
+		"type": "int",
+		"variabletype": "continuous",
+		"displayname": "Splice Sites Non-canonical"
+	},
+	"Multimapping_reads_percent": {
+		"type": "float",
+		"variabletype": "continuous",
+		"displayname": "Multimapping Reads Percent"
+	},
+	"Unmapped_mismatch": {
+		"type": "float",
+		"variabletype": "continuous",
+		"displayname": "Unmapped Mismatch"
+	},
+	"Unmapped_short": {
+		"type": "float",
+		"variabletype": "continuous",
+		"displayname": "Unmapped Short"
+	},
+	"Unmapped_other": {
+		"type": "float",
+		"variabletype": "continuous",
+		"displayname": "Unmapped Other"
+	},
+	"ERCC_reads": {
+		"type": "int",
+		"variabletype": "continuous",
+		"displayname": "ERCC Reads"
+	},
+	"Non_ERCC_reads": {
+		"type": "int",
+		"variabletype": "continuous",
+		"displayname": "Non-ERCC Reads"
+	},
+	"ERCC_to_non_ERCC": {
+		"type": "float",
+		"variabletype": "continuous",
+		"displayname": "ERCC:Non-ERCC"
+	},
+	"Genes_detected": {
+		"type": "int",
+		"variabletype": "continuous",
+		"displayname": "Genes Detected"
+	},
+	"Neoplastic": {
+		"type": "string",
+		"variabletype": "categorical",
+		"displayname": "Neoplastic"
+	},
+	"Class": {
+		"type": "string",
+		"variabletype": "categorical",
+		"displayname": "Class"
+	}
+}

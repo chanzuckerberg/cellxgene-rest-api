@@ -7,7 +7,6 @@ from functools import wraps
 from flask import Flask, jsonify, redirect, url_for, send_file, request, make_response, render_template
 from flask_restful import reqparse
 from flask_restful_swagger_2 import Api, swagger, Resource
-from flask_dance.contrib.google import make_google_blueprint, google
 from flask_cors import CORS
 import numpy as np
 
@@ -18,16 +17,13 @@ CORS(application)
 
 REACTIVE_LIMIT = 5000
 # SECRETS
-GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", default=False)
-GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", default=False)
 SECRET_KEY = os.environ.get("SECRET_KEY", default=None)
 if not SECRET_KEY:
 	raise ValueError("No secret key set for Flask application")
 
 application.config.from_pyfile('app.cfg', silent=True)
 application.config.update(
-	GOOGLE_CLIENT_ID=GOOGLE_CLIENT_ID,
-	GOOGLE_CLIENT_SECRET=GOOGLE_CLIENT_SECRET,
+
 	SECRET_KEY=SECRET_KEY
 )
 dir_path = os.path.dirname(os.path.realpath(__file__))
@@ -40,13 +36,6 @@ application.config.update(
 )
 
 api = Api(application, api_version='0.1',  produces=["application/json"], title="cellxgene rest api", api_spec_url='/api/swagger', description='A API connecting ExpressionMatrix2 clustering algorithm to cellxgene')
-blueprint = make_google_blueprint(
-	client_id=application.config["GOOGLE_CLIENT_ID"],
-	client_secret=application.config["GOOGLE_CLIENT_SECRET"],
-	scope=["profile", "email"]
-)
-
-application.register_blueprint(blueprint, url_prefix="/login")
 
 sys.path.insert(0, application.config["EM2_DIR"])
 from ExpressionMatrix2 import ExpressionMatrix, CellIdList, invalidCellId, ClusterGraphCreationParameters
@@ -79,7 +68,7 @@ def stringstringpairs2dict(ssp):
 
 
 def parse_metadata(cells):
-	e = ExpressionMatrix(application.config["DATA_DIR"])
+	e = ExpressionMatrix(application.config["DATA_DIR"], True)
 
 	mdict = []
 	if invalidCellId not in cells:
@@ -89,7 +78,7 @@ def parse_metadata(cells):
 
 
 def parse_exp_data(cells, genes=(), limit=0, unexpressed_genes=False):
-	e = ExpressionMatrix(application.config["DATA_DIR"])
+	e = ExpressionMatrix(application.config["DATA_DIR"], True)
 
 	if not genes:
 		genes = [e.geneName(gid) for gid in range(e.geneCount())]
@@ -118,7 +107,7 @@ def parse_exp_data(cells, genes=(), limit=0, unexpressed_genes=False):
 
 
 def toCellIDsCpp(cells=()):
-	e = ExpressionMatrix(application.config["DATA_DIR"])
+	e = ExpressionMatrix(application.config["DATA_DIR"], True)
 	cell_number_ids = CellIdList()
 	if cells:
 		for cell_id in cells:
@@ -226,15 +215,7 @@ def convert_variable(datatype, variable):
 		raise
 
 
-# ---- Decorators -------------
-def login_required(f):
-	@wraps(f)
-	def decorated_function(*args, **kwargs):
-		if not google.authorized:
-			return redirect(url_for("google.login"))
-		return f(*args, **kwargs)
 
-	return decorated_function
 
 
 # ---- Traditional Routes -----
@@ -243,30 +224,7 @@ def index():
 	return render_template("swagger.html")
 
 
-# @application.route('/glogin')
-# def glogin():
-#	 if not google.authorized:
-#		 return redirect(url_for("google.login"))
-#	 resp = google.get("/oauth2/v2/userinfo")
-#	 assert resp.ok, resp.text
-#	 return "You are {email} on Google".format(email=resp.json()["email"])
 
-# @application.route('/')
-# def index():
-#	 if not google.authorized:
-#		 return redirect(url_for("google.login"))
-#	 resp = google.get("/oauth2/v2/userinfo")
-#	 assert resp.ok, resp.text
-#	 return "You are {email} on Google".format(email=resp.json()["email"])
-
-# @application.route("/test")
-# @login_required
-# def test():
-#	 print(google)
-#	 if not google.authorized:
-#		 return "Not Authorized"
-#	 else:
-#		 return "You are OK"
 
 # --- Restful Routes ---------
 class MetadataAPI(Resource):
@@ -593,7 +551,7 @@ class ClusterAPI(Resource):
 		# Retrieve cluster
 		run = randint(0, 10000)
 		graphname = "cellgraph_{}".format(run)
-		e = ExpressionMatrix(application.config['DATA_DIR'])
+		e = ExpressionMatrix(application.config['DATA_DIR'], True)
 		args = graph_parser.parse_args()
 		e.createCellGraph(graphname, args.cellsetname, args.similarpairsname, args.similaritythreshold,
 		                  args.connectivity)
@@ -624,6 +582,7 @@ class CellsAPI(Resource):
 				'in': 'path',
 				'type': 'boolean',
 			}],
+
 		'responses': {
 			'200': {
 				'description': 'initialization data for UI',
@@ -693,7 +652,7 @@ class CellsAPI(Resource):
 	def get(self):
 		# TODO Allow random downsampling
 
-		e = ExpressionMatrix(application.config['DATA_DIR'])
+		e = ExpressionMatrix(application.config['DATA_DIR'], True)
 		data = {
 			"reactive": False,
 			"cellids": [],

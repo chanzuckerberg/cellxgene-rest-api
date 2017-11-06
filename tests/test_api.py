@@ -1,5 +1,6 @@
 import unittest
 import requests
+import os
 
 
 class EndPoints(unittest.TestCase):
@@ -7,7 +8,7 @@ class EndPoints(unittest.TestCase):
 
 	def setUp(self):
 		# Local
-		self.url_base = "http://localhost:5000/api/v0.1/"
+		self.url_base = os.environ["CXG_API_BASE"]
 		# Dev
 		# self.url_base = "http://api-dev.clustering.czi.technology/api/v0.1/"
 		# Prod

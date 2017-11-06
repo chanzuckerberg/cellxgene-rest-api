@@ -1,0 +1,8 @@
+version: '2'
+services:
+  cellxgene:
+    image: cellxgene
+    cpu_shares: 100
+    mem_limit: 524288000
+    ports:
+      - "5000:80"

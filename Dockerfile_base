@@ -1,0 +1,31 @@
+FROM ubuntu:xenial
+
+RUN apt-get update
+RUN apt-get install libboost-all-dev python3-all-dev libhdf5-dev graphviz libhdf5-cpp-11 python3-pip git build-essential --yes
+RUN pip3 install --upgrade pip
+RUN pip3 install aniso8601==1.2.1
+RUN pip3 install certifi==2017.7.27.1
+RUN pip3 install chardet==3.0.4
+RUN pip3 install click==6.7
+RUN pip3 install Flask==0.12.2
+RUN pip3 install Flask-Cors==3.0.3
+RUN pip3 install Flask-Dance==0.11.1
+RUN pip3 install Flask-RESTful==0.3.6
+RUN pip3 install flask-restful-swagger-2==0.35
+RUN pip3 install idna==2.6
+RUN pip3 install itsdangerous==0.24
+RUN pip3 install Jinja2==2.9.6
+RUN pip3 install lazy==1.3
+RUN pip3 install MarkupSafe==1.0
+RUN pip3 install numpy==1.12.1
+RUN pip3 install oauthlib==2.0.2
+RUN pip3 install py==1.4.34
+RUN pip3 install pytest==3.2.1
+RUN pip3 install python-dateutil==2.6.1
+RUN pip3 install pytz==2017.2
+RUN pip3 install requests==2.18.4
+RUN pip3 install requests-oauthlib==0.8.0
+RUN pip3 install six==1.10.0
+RUN pip3 install urllib3==1.22
+RUN pip3 install URLObject==2.4.3
+RUN pip3 install Werkzeug==0.12.2
