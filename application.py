@@ -35,7 +35,9 @@ application.config.update(
 	EM2_DIR=os.path.join(dir_path, application.config["EM2_DIR"]),
 )
 
-api = Api(application, api_version='0.1',  produces=["application/json"], title="cellxgene rest api", api_spec_url='/api/swagger', description='A API connecting ExpressionMatrix2 clustering algorithm to cellxgene')
+api = Api(application, api_version='0.1', produces=["application/json"], title="cellxgene rest api",
+		  api_spec_url='/api/swagger',
+		  description='A API connecting ExpressionMatrix2 clustering algorithm to cellxgene')
 
 sys.path.insert(0, application.config["EM2_DIR"])
 from ExpressionMatrix2 import ExpressionMatrix, CellIdList, invalidCellId, ClusterGraphCreationParameters
@@ -43,10 +45,10 @@ from ExpressionMatrix2 import ExpressionMatrix, CellIdList, invalidCellId, Clust
 graph_parser = reqparse.RequestParser()
 graph_parser.add_argument('cellsetname', type=str, default='AllCells', required=False, help="Named cell set")
 graph_parser.add_argument('similarpairsname', type=str, default='ExactHighInformationGenes', required=False,
-                          help="Named setof pairs")
+						  help="Named setof pairs")
 graph_parser.add_argument('similaritythreshold', type=float, required=False, default=0.3, help="Threshold between 0-1")
 graph_parser.add_argument('connectivity', type=int, required=False, default=20,
-                          help="Maximum connectivity, default is 20")
+						  help="Maximum connectivity, default is 20")
 
 metadata_parser = reqparse.RequestParser()
 metadata_parser.add_argument('celllist', type=str, action="append", required=False, help='List of cells by id')
@@ -56,7 +58,7 @@ expression_parser = reqparse.RequestParser()
 expression_parser.add_argument('celllist', type=str, action="append", required=False, help='List of cells by id')
 expression_parser.add_argument('genelist', type=str, action="append", required=False, help='List of genes by name')
 expression_parser.add_argument('include_unexpressed_genes', type=bool, required=False,
-                               help='Include genes with zero expression across cell set')
+							   help='Include genes with zero expression across cell set')
 
 cluster_parser = reqparse.RequestParser()
 cluster_parser.add_argument('clustername', type=str, required=True, help="Name of cell graph")
@@ -215,15 +217,10 @@ def convert_variable(datatype, variable):
 		raise
 
 
-
-
-
 # ---- Traditional Routes -----
 @application.route('/')
 def index():
 	return render_template("swagger.html")
-
-
 
 
 # --- Restful Routes ---------
@@ -415,7 +412,7 @@ class ExpressionAPI(Resource):
 					"example": {
 						"celllist": ["1001000173.G8", "1001000173.D4"],
 						"genelist": ["1/2-SBSRNA4", "A1BG", "A1BG-AS1", "A1CF", "A2LD1", "A2M", "A2ML1", "A2MP1",
-						             "A4GALT"],
+									 "A4GALT"],
 						"include_unexpressed_genes": True,
 					}
 
@@ -510,18 +507,20 @@ class GraphAPI(Resource):
 				'description': 'xy points for cell graph',
 				'examples': {
 					'application/json': {
-						"data": [
-							[
-								"1001000173.G8",
-								0.93836,
-								0.28623
-							],
-							[
-								"1001000173.D4",
-								0.1662,
-								0.79438
-							]
-						],
+						"data": {
+							"1001000173.G8":
+								[
+									0.93836,
+									0.28623
+								],
+
+							"1001000173.D4":
+								[
+									0.1662,
+									0.79438
+								]
+
+						},
 						"status": {
 							"error": False,
 							"errormessage": ""
@@ -539,10 +538,10 @@ class GraphAPI(Resource):
 		run = randint(0, 10000)
 		graphname = "cellgraph_{}".format(run)
 		e.createCellGraph(graphname, args.cellsetname, args.similarpairsname, args.similaritythreshold,
-		                  args.connectivity)
+						  args.connectivity)
 		e.computeCellGraphLayout(graphname)
 		vertices = e.getCellGraphVertices(graphname)
-		data = [[e.getCellMetaDataValue(v.cellId, 'CellName'), v.x(), v.y()] for v in vertices]
+		data = {e.getCellMetaDataValue(v.cellId, 'CellName'): [v.x(), v.y()] for v in vertices}
 		return make_payload(data)
 
 
@@ -554,7 +553,7 @@ class ClusterAPI(Resource):
 		e = ExpressionMatrix(application.config['DATA_DIR'], True)
 		args = graph_parser.parse_args()
 		e.createCellGraph(graphname, args.cellsetname, args.similarpairsname, args.similaritythreshold,
-		                  args.connectivity)
+						  args.connectivity)
 		clustername = "clusters_{}".format(run)
 		params = ClusterGraphCreationParameters()
 		e.createClusterGraph(graphname, params, clustername)
@@ -575,13 +574,13 @@ class CellsAPI(Resource):
 		'summary': 'filter based on metadata fields to get a subset cells, expression data, and metadata',
 		'tags': ['cells'],
 		'description': "Cells takes query parameters definied in the schema retrieved from the /initialize enpoint. <br>For categorical metadata keys filter based on `key=value` <br>"
-		               " For continous  metadata keys filter by `key=min,max`<br> Either value can be replaced by a \*. To have only a minimum value `key=min,\*`  To have only a maximum value `key=\*,max`",
+					   " For continous  metadata keys filter by `key=min,max`<br> Either value can be replaced by a \*. To have only a minimum value `key=min,\*`  To have only a maximum value `key=\*,max`",
 		'parameters': [{
-				'name': '_nograph',
-				'description': "Do not calculate and send back graph (graph is sent by default)",
-				'in': 'path',
-				'type': 'boolean',
-			}],
+			'name': '_nograph',
+			'description': "Do not calculate and send back graph (graph is sent by default)",
+			'in': 'path',
+			'type': 'boolean',
+		}],
 
 		'responses': {
 			'200': {
@@ -589,51 +588,63 @@ class CellsAPI(Resource):
 				'examples': {
 					'application/json': {
 						"data": {
-							"data": {
-								"badmetadatacount": 0,
-								"cellcount": 0,
-								"cellids": ["..."],
-								"metadata": [
-									{
-										"CellName": "1001000173.G8",
-										"Class": "Neoplastic",
-										"Cluster_2d": "11",
-										"Cluster_2d_color": "#8C564B",
-										"Cluster_CNV": "1",
-										"Cluster_CNV_color": "#1F77B4",
-										"ERCC_reads": "152104",
-										"ERCC_to_non_ERCC": "0.562454470489481",
-										"Genes_detected": "1962",
-										"Location": "Tumor",
-										"Location.color": "#FF7F0E",
-										"Multimapping_reads_percent": "2.67",
-										"Neoplastic": "Neoplastic",
-										"Non_ERCC_reads": "270429",
-										"Sample.name": "BT_S2",
-										"Sample.name.color": "#AEC7E8",
-										"Sample.type": "Glioblastoma",
-										"Sample.type.color": "#1F77B4",
-										"Selection": "Unpanned",
-										"Selection.color": "#98DF8A",
-										"Splice_sites_AT.AC": "102",
-										"Splice_sites_Annotated": "122397",
-										"Splice_sites_GC.AG": "761",
-										"Splice_sites_GT.AG": "125741",
-										"Splice_sites_non_canonical": "56",
-										"Splice_sites_total": "126660",
-										"Total_reads": "1741039",
-										"Unique_reads": "1400382",
-										"Unique_reads_percent": "80.43",
-										"Unmapped_mismatch": "2.15",
-										"Unmapped_other": "0.18",
-										"Unmapped_short": "14.56",
-										"housekeeping_cluster": "2",
-										"housekeeping_cluster_color": "#AEC7E8",
-										"recluster_myeloid": "NA",
-										"recluster_myeloid_color": "NA"
-									},
-								],
-								"reactive": True
+							"badmetadatacount": 0,
+							"cellcount": 0,
+							"cellids": ["..."],
+							"metadata": [
+								{
+									"CellName": "1001000173.G8",
+									"Class": "Neoplastic",
+									"Cluster_2d": "11",
+									"Cluster_2d_color": "#8C564B",
+									"Cluster_CNV": "1",
+									"Cluster_CNV_color": "#1F77B4",
+									"ERCC_reads": "152104",
+									"ERCC_to_non_ERCC": "0.562454470489481",
+									"Genes_detected": "1962",
+									"Location": "Tumor",
+									"Location.color": "#FF7F0E",
+									"Multimapping_reads_percent": "2.67",
+									"Neoplastic": "Neoplastic",
+									"Non_ERCC_reads": "270429",
+									"Sample.name": "BT_S2",
+									"Sample.name.color": "#AEC7E8",
+									"Sample.type": "Glioblastoma",
+									"Sample.type.color": "#1F77B4",
+									"Selection": "Unpanned",
+									"Selection.color": "#98DF8A",
+									"Splice_sites_AT.AC": "102",
+									"Splice_sites_Annotated": "122397",
+									"Splice_sites_GC.AG": "761",
+									"Splice_sites_GT.AG": "125741",
+									"Splice_sites_non_canonical": "56",
+									"Splice_sites_total": "126660",
+									"Total_reads": "1741039",
+									"Unique_reads": "1400382",
+									"Unique_reads_percent": "80.43",
+									"Unmapped_mismatch": "2.15",
+									"Unmapped_other": "0.18",
+									"Unmapped_short": "14.56",
+									"housekeeping_cluster": "2",
+									"housekeeping_cluster_color": "#AEC7E8",
+									"recluster_myeloid": "NA",
+									"recluster_myeloid_color": "NA"
+								},
+							],
+							"reactive": True,
+							"graph": {
+								"1001000173.G8":
+									[
+										0.93836,
+										0.28623
+									],
+
+								"1001000173.D4":
+									[
+										0.1662,
+										0.79438
+									]
+
 							},
 							"status": {
 								"error": False,
@@ -642,10 +653,11 @@ class CellsAPI(Resource):
 
 						},
 					}
-				}
+				},
 			},
+
 			'400': {
-				'description': 'bad query parames',
+				'description': 'bad query params',
 			}
 		}
 	})
@@ -697,7 +709,7 @@ class CellsAPI(Resource):
 					filters.append(filtername)
 					if value["query"]["min"] and value["query"]["max"]:
 						e.createCellSetUsingNumericMetaDataBetween(filtername, key, value["query"]["min"],
-						                                           value["query"]["max"])
+																   value["query"]["max"])
 					elif value["query"]["min"]:
 						e.createCellSetUsingNumericMetaDataGreaterThan(filtername, key, value["query"]["min"])
 					elif value["query"]["max"]:
@@ -722,11 +734,17 @@ class CellsAPI(Resource):
 			}
 			os.chdir(application.config['DATA_DIR'])
 			graphname = "cellgraph_{}".format(run)
-			e.createCellGraph(graphname, output_cellset, default_graph_params["similarpairsname"], default_graph_params["similaritythreshold"],
-			                  default_graph_params["connectivity"])
+			e.createCellGraph(graphname, output_cellset, default_graph_params["similarpairsname"],
+							  default_graph_params["similaritythreshold"],
+							  default_graph_params["connectivity"])
 			e.computeCellGraphLayout(graphname)
 			vertices = e.getCellGraphVertices(graphname)
-			graph = [[e.getCellMetaDataValue(v.cellId, 'CellName'), v.x(), v.y()] for v in vertices]
+			normalized_verticies = normalize_verticies(vertices)
+			graph = {
+				e.getCellMetaDataValue(normalized_verticies["labels"][i], 'CellName'): [normalized_verticies["x"][i],
+																						normalized_verticies["y"][i]]
+				for i
+				in range(len(normalized_verticies["labels"]))}
 		if output_cellset != "AllCells":
 			e.removeCellSet(output_cellset)
 
