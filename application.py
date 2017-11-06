@@ -201,6 +201,31 @@ def get_metadata_ranges(schema, metadata):
 	return options
 
 
+def normalize_verticies(verticies):
+	labels = []
+	x = []
+	y = []
+	for v in verticies:
+		labels.append(v.cellId)
+		x.append(v.x())
+		y.append(v.y())
+	x = normalize(x)
+	y = normalize(y)
+	return {
+		"labels": labels,
+		"x": x,
+		"y": y
+	}
+
+
+def normalize(v):
+	vec = np.array(v)
+	norm = np.linalg.norm(vec, ord=np.inf)
+	if norm == 0:
+		return vec
+	return vec / norm
+
+
 class QueryStringError(Exception):
 	pass
 
@@ -574,7 +599,7 @@ class CellsAPI(Resource):
 		'summary': 'filter based on metadata fields to get a subset cells, expression data, and metadata',
 		'tags': ['cells'],
 		'description': "Cells takes query parameters definied in the schema retrieved from the /initialize enpoint. <br>For categorical metadata keys filter based on `key=value` <br>"
-					   " For continous  metadata keys filter by `key=min,max`<br> Either value can be replaced by a \*. To have only a minimum value `key=min,\*`  To have only a maximum value `key=\*,max`",
+					   " For continous  metadata keys filter by `key=min,max`<br> Either value can be replaced by a \*. To have only a minimum value `key=min,\*`  To have only a maximum value `key=\*,max` <br>Graph data (if retrieved) is normalized",
 		'parameters': [{
 			'name': '_nograph',
 			'description': "Do not calculate and send back graph (graph is sent by default)",
