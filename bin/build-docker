@@ -1,0 +1,22 @@
+#!/bin/bash
+set -e
+
+export REPO=chanzuckerberg/cellxgene-rest-api
+
+BRANCH=`echo $1 | sed 's/\//-/g'`
+COMMIT="$2"
+BUILD_NUMBER="$3"
+CI_TAG="chanzuckerberg/cellxgene-rest-api:ci"
+
+echo $BRANCH
+echo $COMMIT
+echo $REPO
+echo $TAG
+echo '--'
+
+docker pull $REPO || true
+docker build -t $CI_TAG .
+
+docker tag $CI_TAG $REPO:"sha-$COMMIT"
+docker tag $CI_TAG $REPO:"branch-$BRANCH"
+docker tag $CI_TAG $REPO:"build-$BUILD_NUMBER"
