@@ -535,7 +535,7 @@ class GraphAPI(Resource):
 	def get(self):
 		args = self.parser.parse_args()
 		os.chdir(application.config['DATA_DIR'])
-		e = ExpressionMatrix(application.config['DATA_DIR'])
+		e = ExpressionMatrix(application.config['DATA_DIR'], True)
 		run = randint(0, 10000)
 		graphname = "cellgraph_{}".format(run)
 		e.createCellGraph(graphname, args.cellsetname, args.similarpairsname, args.similaritythreshold,
