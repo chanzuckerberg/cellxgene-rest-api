@@ -1,0 +1,7 @@
+#!/bin/bash
+set -e
+
+export REPO=chanzuckerberg/cellxgene-rest-api
+
+docker login -u $DOCKER_USER -p $DOCKER_PASS
+docker push $REPO
