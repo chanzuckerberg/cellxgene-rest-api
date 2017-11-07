@@ -21,7 +21,7 @@ script:
 - nosetests
 after_success:
 - bash <(curl -s https://codecov.io/bash)
-- bin/push-docke
+- bin/push-docker
 deploy:
 - provider: script
   script: ecs deploy stp-staging cellxgene-rest-api-staging --tag sha-${TRAVIS_COMMIT::8}
