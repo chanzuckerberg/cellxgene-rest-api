@@ -26,4 +26,4 @@ deploy:
 - provider: script
   script: ecs deploy stp-staging cellxgene-rest-api-staging --tag sha-${TRAVIS_COMMIT::8}
   on:
-    branch: ryanking/build_and_push
+    branch: master
