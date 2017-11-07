@@ -8,4 +8,9 @@ def execfile(filename):
 activate_this = os.path.join( '/home/ubuntu/clustering_flask_api', 'venv/bin', 'activate_this.py' )
 execfile( activate_this )
 
-from application import application as application
+def application(environ, start_response):
+    for key in ['SECRET_KEY']:
+        os.environ[key] = environ.get(key, '')
+    from application import application as _application
+
+    return _application(environ, start_response)
