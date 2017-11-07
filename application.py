@@ -657,20 +657,20 @@ class CellsAPI(Resource):
 								},
 							],
 							"reactive": True,
-							"graph": {
-								"1001000173.G8":
-									[
-										0.93836,
-										0.28623
-									],
+							"graph": [
+								[
+									"1001000173.G8",
+									0.93836,
+									0.28623
+								],
 
-								"1001000173.D4":
-									[
-										0.1662,
-										0.79438
-									]
+								[
+									"1001000173.D4",
+									0.1662,
+									0.79438
+								]
 
-							},
+							],
 							"status": {
 								"error": False,
 								"errormessage": ""
@@ -765,11 +765,10 @@ class CellsAPI(Resource):
 			e.computeCellGraphLayout(graphname)
 			vertices = e.getCellGraphVertices(graphname)
 			normalized_verticies = normalize_verticies(vertices)
-			graph = {
-				e.getCellMetaDataValue(normalized_verticies["labels"][i], 'CellName'): [normalized_verticies["x"][i],
-																						normalized_verticies["y"][i]]
-				for i
-				in range(len(normalized_verticies["labels"]))}
+			graph = [
+				(e.getCellMetaDataValue(normalized_verticies["labels"][i], 'CellName'), normalized_verticies["x"][i],
+				 normalized_verticies["y"][i])
+				for i in range(len(normalized_verticies["labels"]))]
 		if output_cellset != "AllCells":
 			e.removeCellSet(output_cellset)
 
