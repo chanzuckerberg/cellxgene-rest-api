@@ -1,7 +1,7 @@
 FROM ubuntu:xenial
-
-RUN apt-get update
-RUN apt-get install libboost-all-dev python3-all-dev libhdf5-dev graphviz libhdf5-cpp-11 python3-pip git build-essential --yes
+RUN apt-get update && apt-get install curl libboost-all-dev python3-all-dev libhdf5-dev graphviz libhdf5-cpp-11 python3-pip git build-essential --yes
+RUN curl -sL https://deb.nodesource.com/setup_9.x | bash -
+RUN apt-get install nodejs
 RUN pip3 install --upgrade pip
 ADD requirements.txt .
 RUN pip3 install -r requirements.txt
