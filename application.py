@@ -4,7 +4,7 @@ from random import randint
 from re import escape
 
 from functools import wraps
-from flask import Flask, jsonify, redirect, url_for, send_file, request, make_response, render_template
+from flask import Flask, jsonify, send_from_directory, request, make_response, render_template
 from flask_restful import reqparse
 from flask_restful_swagger_2 import Api, swagger, Resource
 from flask_cors import CORS
@@ -12,7 +12,7 @@ import numpy as np
 
 from schemaparse import parse_schema
 
-application = Flask(__name__)
+application = Flask(__name__, static_url_path='/templates')
 CORS(application)
 
 REACTIVE_LIMIT = 5000
@@ -20,10 +20,13 @@ REACTIVE_LIMIT = 5000
 SECRET_KEY = os.environ.get("SECRET_KEY", default=None)
 if not SECRET_KEY:
 	raise ValueError("No secret key set for Flask application")
+CXG_API_BASE = os.environ.get("CXG_API_BASE", default=None)
+if not CXG_API_BASE:
+	raise ValueError("No api base")
 
 application.config.from_pyfile('app.cfg', silent=True)
 application.config.update(
-
+	CXG_API_BASE=CXG_API_BASE,
 	SECRET_KEY=SECRET_KEY
 )
 dir_path = os.path.dirname(os.path.realpath(__file__))
@@ -245,7 +248,20 @@ def convert_variable(datatype, variable):
 # ---- Traditional Routes -----
 @application.route('/')
 def index():
+	url_base = application.config["CXG_API_BASE"]
+	split_base = url_base.split("/")
+	prefix = '/'.join(split_base[:-2]) + "/"
+	version = "{}/".format(split_base[-2])
+	return render_template("index.html", prefix=prefix, version=version)
+
+
+@application.route('/swagger')
+def swag():
 	return render_template("swagger.html")
+
+@application.route('/favicon.png')
+def icon():
+	return send_from_directory('templates', 'favicon.png')
 
 
 # --- Restful Routes ---------

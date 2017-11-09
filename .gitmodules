@@ -3,5 +3,5 @@
 	url = https://github.com/chanzuckerberg/ExpressionMatrix2.git
 [submodule "cellxgene"]
 	path = cellxgene
-	url = git@github.com:chanzuckerberg/cellxgene.git
+	url = https://github.com/chanzuckerberg/cellxgene.git
 	branch = master
