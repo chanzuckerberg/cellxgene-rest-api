@@ -1,9 +1,6 @@
 import sys, os
 from collections import defaultdict
-from random import randint
-from re import escape
 
-from functools import wraps
 from flask import Flask, jsonify, send_from_directory, request, make_response, render_template
 from flask_restful import reqparse
 from flask_restful_swagger_2 import Api, swagger, Resource
@@ -43,7 +40,8 @@ api = Api(application, api_version='0.1', produces=["application/json"], title="
 		  description='A API connecting ExpressionMatrix2 clustering algorithm to cellxgene')
 
 sys.path.insert(0, application.config["EM2_DIR"])
-from ExpressionMatrix2 import ExpressionMatrix, CellIdList, invalidCellId, ClusterGraphCreationParameters
+import pyEM2
+# from ExpressionMatrix2 import ExpressionMatrix, CellIdList, invalidCellId, ClusterGraphCreationParameters
 
 graph_parser = reqparse.RequestParser()
 graph_parser.add_argument('cellsetname', type=str, default='AllCells', required=False, help="Named cell set")
@@ -71,25 +69,53 @@ cluster_parser.add_argument('clustername', type=str, required=True, help="Name o
 def stringstringpairs2dict(ssp):
 	return {i.first: i.second for i in ssp}
 
+def filter(cell, qs):
+	keep = True
+	for key, value in qs.items():
+		if value["variabletype"] == 'categorical':
+			if cell.metadata[key] not in value["query"]:
+				keep = False
+				break
+		elif value["variabletype"] == 'continuous':
+			if value["query"]["min"] and value["query"]["max"]:
+				keep = value["query"]["min"] <= float(cell.metadata[key]) <= value["query"]["max"]
+			elif value["query"]["min"]:
+				keep = value["query"]["min"] <= float(cell.metadata[key])
+			elif value["query"]["max"]:
+				keep = float(cell.metadata[key]) <= value["query"]["max"]
 
-def parse_metadata(cells):
-	e = ExpressionMatrix(application.config["DATA_DIR"], True)
+			if not keep:
+				break
+	return keep
 
-	mdict = []
-	if invalidCellId not in cells:
-		metadata = e.getCellsMetaData(cells)
-		mdict = [stringstringpairs2dict(m) for m in metadata]
-	return {"cell_metadata": mdict}
+def parse_metadata(cells=()):
+	# Done
+	e = pyEM2.ExpressionMatrix.from_existing_directory(application.config["DATA_DIR"])
+	mdata = []
+	if cells:
+		mdata = [c.metadata for c in e.cells if c.name in cells]
+	else:
+		mdata = [c.metadata for c in e.cells]
+	return {"cell_metadata": mdata}
 
 
-def parse_exp_data(cells, genes=(), limit=0, unexpressed_genes=False):
-	e = ExpressionMatrix(application.config["DATA_DIR"], True)
-
+def parse_exp_data(cells=(), genes=(), limit=0, unexpressed_genes=False):
+	e = pyEM2.ExpressionMatrix.from_existing_directory(application.config["DATA_DIR"])
 	if not genes:
-		genes = [e.geneName(gid) for gid in range(e.geneCount())]
-	expression = np.zeros([len(genes), len(list(cells))])
-	for idx, gene in enumerate(genes):
-		expression[idx] = list(e.getCellsExpressionCountFromGeneName(cells, gene))
+		genes = [g.name for g in e.genes]
+	em_cells = []
+	for cell in e.cells:
+		if cells and cell.name in cells:
+			em_cells.append(cell)
+		elif not cells:
+			em_cells.append(cell)
+	expression = np.zeros([len(genes), len(em_cells)])
+	for c_idx, cell in enumerate(em_cells):
+		expression_counts = cell.expression_counts
+		for g_idx, gene in enumerate(genes):
+			if gene in expression_counts:
+				expression[g_idx, c_idx] = expression_counts[gene]
+
 	if not unexpressed_genes:
 		genes_expressed = expression.any(axis=1)
 		genes = [genes[idx] for idx, val in enumerate(genes_expressed) if val]
@@ -98,29 +124,19 @@ def parse_exp_data(cells, genes=(), limit=0, unexpressed_genes=False):
 	if limit and len(genes) > limit:
 		genes = genes[:limit]
 		expression = expression[:limit]
+
 	cell_data = []
-	for idx, cid in enumerate(cells):
+	for idx, cell in enumerate(em_cells):
 		cell_data.append({
-			"cellname": e.getCellMetaDataValue(cid, "CellName"),
+			"cellname": cell.name,
 			"e": list(expression[:, idx]),
 		})
+
 	return {
 		"genes": genes,
 		"cells": cell_data,
 		"nonzero_gene_count": int(np.sum(expression.any(axis=1)))
 	}
-
-
-def toCellIDsCpp(cells=()):
-	e = ExpressionMatrix(application.config["DATA_DIR"], True)
-	cell_number_ids = CellIdList()
-	if cells:
-		for cell_id in cells:
-			cell_number_ids.append(e.cellIdFromString(cell_id))
-	else:
-		cell_number_ids = e.getCellSet('AllCells')
-	return cell_number_ids
-
 
 def make_payload(data, errormessage="", errorcode=200):
 	error = False
@@ -383,7 +399,7 @@ class MetadataAPI(Resource):
 	def post(self):
 		args = self.parser.parse_args()
 		cell_list = args.celllist
-		metadata = parse_metadata(toCellIDsCpp(cell_list))
+		metadata = parse_metadata(cell_list)
 		if cell_list and len(metadata['cell_metadata']) < len(cell_list):
 			return make_payload([], "Some cell ids not available", 400)
 		return make_payload(metadata)
@@ -438,8 +454,7 @@ class ExpressionAPI(Resource):
 		# TODO add choice for limit (pagination?)
 		args = self.parser.parse_args()
 		unexpressed_genes = args.get('include_unexpressed_genes', False)
-
-		data = parse_exp_data(cells=toCellIDsCpp(), limit=40, unexpressed_genes=unexpressed_genes)
+		data = parse_exp_data(limit=40, unexpressed_genes=unexpressed_genes)
 		return make_payload(data)
 
 	@swagger.doc({
@@ -502,112 +517,35 @@ class ExpressionAPI(Resource):
 		unexpressed_genes = args.get('include_unexpressed_genes', False)
 		if not (cell_list) and not (gene_list):
 			return make_payload([], "must include celllist and/or genelist parameter", 400)
-		data = parse_exp_data(toCellIDsCpp(cell_list), gene_list, unexpressed_genes=unexpressed_genes)
+		data = parse_exp_data(cell_list, gene_list, unexpressed_genes=unexpressed_genes)
 		if cell_list and len(data['cells']) < len(cell_list):
 			return make_payload([], "Some cell ids not available", 400)
 		if gene_list and len(data['genes']) < len(gene_list):
 			return make_payload([], "Some genes not available", 400)
 		return make_payload(data)
 
-
-class GraphAPI(Resource):
-	def __init__(self):
-		self.parser = graph_parser
-
-	@swagger.doc({
-		'summary': 'computes the graph for a named cell set',
-		'tags': ['graph'],
-		'parameters': [
-			{
-				'name': 'cellsetname',
-				'description': "Named cell set ex. 'AllCells'",
-				'in': 'path',
-				'type': 'string',
-			},
-			{
-				'name': 'similarpairsname',
-				'description': "Named set of pairs ex. 'ExtractHighInformationGenes'",
-				'in': 'path',
-				'type': 'string',
-			},
-			{
-				'name': 'similaritythreshold',
-				'description': 'Threshold between 0-1 ex. 0.3',
-				'in': 'path',
-				'type': 'number',
-			},
-			{
-				'name': 'connectivity',
-				'description': 'Maximum connectivity ex. 20',
-				'in': 'path',
-				'type': 'number',
-			}
-		],
-		'responses': {
-			'200': {
-				'description': 'xy points for cell graph',
-				'examples': {
-					'application/json': {
-						"data": {
-							"1001000173.G8":
-								[
-									0.93836,
-									0.28623
-								],
-
-							"1001000173.D4":
-								[
-									0.1662,
-									0.79438
-								]
-
-						},
-						"status": {
-							"error": False,
-							"errormessage": ""
-						}
-
-					}
-				}
-			}
-		}
-	})
-	def get(self):
-		args = self.parser.parse_args()
-		os.chdir(application.config['DATA_DIR'])
-		e = ExpressionMatrix(application.config['DATA_DIR'], True)
-		run = randint(0, 10000)
-		graphname = "cellgraph_{}".format(run)
-		e.createCellGraph(graphname, args.cellsetname, args.similarpairsname, args.similaritythreshold,
-						  args.connectivity)
-		e.computeCellGraphLayout(graphname)
-		vertices = e.getCellGraphVertices(graphname)
-		data = {e.getCellMetaDataValue(v.cellId, 'CellName'): [v.x(), v.y()] for v in vertices}
-		return make_payload(data)
-
-
-class ClusterAPI(Resource):
-	def get(self):
-		# Retrieve cluster
-		run = randint(0, 10000)
-		graphname = "cellgraph_{}".format(run)
-		e = ExpressionMatrix(application.config['DATA_DIR'], True)
-		args = graph_parser.parse_args()
-		e.createCellGraph(graphname, args.cellsetname, args.similarpairsname, args.similaritythreshold,
-						  args.connectivity)
-		clustername = "clusters_{}".format(run)
-		params = ClusterGraphCreationParameters()
-		e.createClusterGraph(graphname, params, clustername)
-		clusters = e.getClusterGraphVertices(clustername)
-		clusters = [i for i in clusters]
-		cells = {}
-		for i in clusters:
-			cells[i] = [e.getCellMetaDataValue(cid, "CellName") for cid in e.getClusterCells(clustername, i)]
-		# TODO calculate expression values for these
-		# TODO does the graph really need to be created each time?
-		# TODO parameterize graph with cell sets?
-
-		return make_payload({clustername: clustername}, errorcode=201)
+# class ClusterAPI(Resource):
+# 	def get(self):
+# 		# Retrieve cluster
+# 		run = randint(0, 10000)
+# 		graphname = "cellgraph_{}".format(run)
+# 		e = ExpressionMatrix(application.config['DATA_DIR'], True)
+# 		args = graph_parser.parse_args()
+# 		e.createCellGraph(graphname, args.cellsetname, args.similarpairsname, args.similaritythreshold,
+# 						  args.connectivity)
+# 		clustername = "clusters_{}".format(run)
+# 		params = ClusterGraphCreationParameters()
+# 		e.createClusterGraph(graphname, params, clustername)
+# 		clusters = e.getClusterGraphVertices(clustername)
+# 		clusters = [i for i in clusters]
+# 		cells = {}
+# 		for i in clusters:
+# 			cells[i] = [e.getCellMetaDataValue(cid, "CellName") for cid in e.getClusterCells(clustername, i)]
+# 		# TODO calculate expression values for these
+# 		# TODO does the graph really need to be created each time?
+# 		# TODO parameterize graph with cell sets?
+#
+# 		return make_payload({clustername: clustername}, errorcode=201)
 
 
 class CellsAPI(Resource):
@@ -705,7 +643,7 @@ class CellsAPI(Resource):
 	def get(self):
 		# TODO Allow random downsampling
 
-		e = ExpressionMatrix(application.config['DATA_DIR'], True)
+		e = pyEM2.ExpressionMatrix.from_existing_directory(application.config["DATA_DIR"])
 		data = {
 			"reactive": False,
 			"cellids": [],
@@ -722,81 +660,31 @@ class CellsAPI(Resource):
 			qs = parse_querystring(request.args)
 		except QueryStringError as e:
 			return make_payload({}, str(e), 400)
+
+
 		schema = parse_schema(os.path.join(application.config["SCHEMAS_DIR"], "test_data_schema.json"))
-		metadata = parse_metadata(toCellIDsCpp())['cell_metadata']
-		bad_metadata_count = 0
 		keptcells = []
-		run = randint(0, 10000)
-		output_cellset = "out_{}".format(run)
 		if len(qs):
-			# TODO catch errors
-			error = False
-			filters = []
-			for key, value in qs.items():
-				if value["variabletype"] == 'categorical':
-					category_filter = []
-					for idx, item in enumerate(value["query"]):
-						queryval = escape(item)
-						filtername = "{}_{}_{}".format(key, run, idx)
-						e.createCellSetUsingMetaData(filtername, key, queryval, False)
-						category_filter.append(filtername)
-					category_output_filter = "{}_out_{}".format(key, run)
-					e.createCellSetUnion(",".join(category_filter), category_output_filter)
-					filters.append(category_output_filter)
-					for cellset in category_filter:
-						e.removeCellSet(cellset)
-				elif value["variabletype"] == 'continuous':
-					filtername = "{}_{}".format(key, run)
-					filters.append(filtername)
-					if value["query"]["min"] and value["query"]["max"]:
-						e.createCellSetUsingNumericMetaDataBetween(filtername, key, value["query"]["min"],
-																   value["query"]["max"])
-					elif value["query"]["min"]:
-						e.createCellSetUsingNumericMetaDataGreaterThan(filtername, key, value["query"]["min"])
-					elif value["query"]["max"]:
-						e.createCellSetUsingNumericMetaDataLessThan(filtername, key, value["query"]["max"])
-					else:
-						filters.pop(filters.index(filtername))
-			e.createCellSetIntersection(",".join(filters), output_cellset)
-			keptcells = parse_metadata(e.getCellSet(output_cellset))["cell_metadata"]
-			for cellset in filters:
-				e.removeCellSet(cellset)
+			keptcells = [cell for cell in e.cells if filter(cell, qs)]
 		else:
-			keptcells = metadata
-			output_cellset = "AllCells"
-		ranges = get_metadata_ranges(schema, keptcells)
-		data["cellcount"] = len(keptcells)
+			keptcells = e.cells
+		keptcell_ids = [m.name for m in keptcells]
+		metadata = parse_metadata(keptcell_ids)["cell_metadata"]
+		ranges = get_metadata_ranges(schema, metadata)
+		data["cellcount"] = len(keptcell_ids)
 		graph = None
 		if not nograph:
-			default_graph_params = {
-				"similarpairsname": "ExactHighInformationGenes",
-				"similaritythreshold": 0.3,
-				"connectivity": 20,
-			}
-			os.chdir(application.config['DATA_DIR'])
-			graphname = "cellgraph_{}".format(run)
-			e.createCellGraph(graphname, output_cellset, default_graph_params["similarpairsname"],
-							  default_graph_params["similaritythreshold"],
-							  default_graph_params["connectivity"])
-			e.computeCellGraphLayout(graphname)
-			vertices = e.getCellGraphVertices(graphname)
-			normalized_verticies = normalize_verticies(vertices)
-			graph = [
-				(e.getCellMetaDataValue(normalized_verticies["labels"][i], 'CellName'), normalized_verticies["x"][i],
-				 normalized_verticies["y"][i])
-				for i in range(len(normalized_verticies["labels"]))]
-		if output_cellset != "AllCells":
-			e.removeCellSet(output_cellset)
-
+			sps = e.create_similar_pairs(0, 10, 512, 42)
+			cg = e.create_cell_graph(0, 5, sps)
+			graph = [(v.cell.name, v.x, v.y) for v in cg.vertices]
 		if data["cellcount"] <= REACTIVE_LIMIT:
 			data["reactive"] = True
-			data["metadata"] = keptcells
-			data["cellids"] = [m["CellName"] for m in keptcells]
+			data["metadata"] = metadata
+			data["cellids"] = [m.name for m in keptcells]
 			data["ranges"] = ranges
-			# data["expression"] = parse_exp_data2(data["cellids"])
-			data["badmetadatacount"] = bad_metadata_count
 			data["graph"] = graph
 		return make_payload(data)
+
 
 
 class InitializeAPI(Resource):
@@ -880,18 +768,16 @@ class InitializeAPI(Resource):
 	})
 	def get(self):
 		schema = parse_schema(os.path.join(application.config["SCHEMAS_DIR"], "test_data_schema.json"))
-		metadata = parse_metadata(toCellIDsCpp())["cell_metadata"]
-
+		metadata = parse_metadata()["cell_metadata"]
 		options = get_metadata_ranges(schema, metadata)
 		return make_payload({"schema": schema, "options": options, "cellcount": len(metadata)})
 
 
 api.add_resource(MetadataAPI, "/api/v0.1/metadata")
 api.add_resource(ExpressionAPI, "/api/v0.1/expression")
-api.add_resource(GraphAPI, "/api/v0.1/graph")
 api.add_resource(InitializeAPI, "/api/v0.1/initialize")
 api.add_resource(CellsAPI, "/api/v0.1/cells")
-api.add_resource(ClusterAPI, "/api/v0.1/cluster")
+# api.add_resource(ClusterAPI, "/api/v0.1/cluster")
 
 if __name__ == "__main__":
 	application.run(host='0.0.0.0', debug=True)

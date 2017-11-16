@@ -77,13 +77,6 @@ class EndPoints(unittest.TestCase):
 		assert len(result_json["data"]['cells']) == 1
 		assert len(result_json["data"]['cells'][0]['e']) == 1
 
-	def test_graph_endpoint(self):
-		url = "{base}{endpoint}?{params}".format(base=self.url_base, endpoint="graph", params="&".join(
-			["cellsetname=AllCells", "similarpairsname=ExactHighInformationGenes", "similaritythreshold=0.3",
-			 "connectivity=20"]))
-		result = self.session.get(url)
-		assert result.status_code == 200
-
 	def test_initialize(self):
 		url = "{base}{endpoint}".format(base=self.url_base, endpoint="initialize")
 		result = self.session.get(url)
