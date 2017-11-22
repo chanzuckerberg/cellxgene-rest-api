@@ -2,6 +2,7 @@
 	path = cellxgene
 	url = https://github.com/chanzuckerberg/cellxgene.git
 	branch = master
-[submodule "pyEM2"]
-	path = pyEM2
-	url = https://github.com/chanzuckerberg/pyEM2.git
+[submodule "ExpressionMatrix2"]
+	path = ExpressionMatrix2
+	url = https://github.com/chanzuckerberg/ExpressionMatrix2.git
+	branch = master
