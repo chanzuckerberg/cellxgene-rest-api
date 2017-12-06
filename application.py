@@ -1,5 +1,6 @@
 import sys, os
 from collections import defaultdict
+from re import escape
 
 from flask import Flask, jsonify, send_from_directory, request, make_response, render_template
 from flask_restful import reqparse
@@ -12,7 +13,7 @@ from schemaparse import parse_schema
 application = Flask(__name__, static_url_path='/templates')
 CORS(application)
 
-REACTIVE_LIMIT = 5000
+REACTIVE_LIMIT = 10000
 # SECRETS
 SECRET_KEY = os.environ.get("SECRET_KEY", default=None)
 if not SECRET_KEY:
@@ -40,8 +41,10 @@ api = Api(application, api_version='0.1', produces=["application/json"], title="
 		  description='A API connecting ExpressionMatrix2 clustering algorithm to cellxgene')
 
 sys.path.insert(0, application.config["EM2_DIR"])
-import pyEM2
-# from ExpressionMatrix2 import ExpressionMatrix, CellIdList, invalidCellId, ClusterGraphCreationParameters
+from ExpressionMatrix2 import ExpressionMatrix
+
+INVALIDCELLID = 4294967295
+
 
 graph_parser = reqparse.RequestParser()
 graph_parser.add_argument('cellsetname', type=str, default='AllCells', required=False, help="Named cell set")
@@ -64,57 +67,52 @@ expression_parser.add_argument('include_unexpressed_genes', type=bool, required=
 cluster_parser = reqparse.RequestParser()
 cluster_parser.add_argument('clustername', type=str, required=True, help="Name of cell graph")
 
+e = ExpressionMatrix(application.config["DATA_DIR"], True)
+
 
 # ---- Helper Functions -------
-def stringstringpairs2dict(ssp):
-	return {i.first: i.second for i in ssp}
 
 def filter(cell, qs):
 	keep = True
 	for key, value in qs.items():
 		if value["variabletype"] == 'categorical':
-			if cell.metadata[key] not in value["query"]:
+			if e.getCellMetaDataValue(cell, key) not in value["query"]:
 				keep = False
 				break
 		elif value["variabletype"] == 'continuous':
 			if value["query"]["min"] and value["query"]["max"]:
-				keep = value["query"]["min"] <= float(cell.metadata[key]) <= value["query"]["max"]
+				keep = value["query"]["min"] <= float(e.getCellMetaDataValue(cell, key)) <= value["query"]["max"]
 			elif value["query"]["min"]:
-				keep = value["query"]["min"] <= float(cell.metadata[key])
+				keep = value["query"]["min"] <= float(e.getCellMetaDataValue(cell, key))
 			elif value["query"]["max"]:
-				keep = float(cell.metadata[key]) <= value["query"]["max"]
+				keep = float(e.getCellMetaDataValue(cell, key)) <= value["query"]["max"]
 
 			if not keep:
 				break
 	return keep
 
-def parse_metadata(cells=()):
+def parse_metadata(cells=False):
 	# Done
-	e = pyEM2.ExpressionMatrix.from_existing_directory(application.config["DATA_DIR"])
 	mdata = []
-	if cells:
-		mdata = [c.metadata for c in e.cells if c.name in cells]
-	else:
-		mdata = [c.metadata for c in e.cells]
+	if cells == False:
+		cells = e.getCellSet('AllCells')
+	if INVALIDCELLID not in cells:
+		mdata = e.getCellsMetaData(cells)
+		mdata = [{k:v for k,v in i} for i in mdata]
 	return {"cell_metadata": mdata}
 
 
 def parse_exp_data(cells=(), genes=(), limit=0, unexpressed_genes=False):
-	e = pyEM2.ExpressionMatrix.from_existing_directory(application.config["DATA_DIR"])
 	if not genes:
-		genes = [g.name for g in e.genes]
-	em_cells = []
-	for cell in e.cells:
-		if cells and cell.name in cells:
-			em_cells.append(cell)
-		elif not cells:
-			em_cells.append(cell)
-	expression = np.zeros([len(genes), len(em_cells)])
-	for c_idx, cell in enumerate(em_cells):
-		expression_counts = cell.expression_counts
-		for g_idx, gene in enumerate(genes):
-			if gene in expression_counts:
-				expression[g_idx, c_idx] = expression_counts[gene]
+		genes = [i for i in range(e.geneCount())]
+	if not cells:
+		cells = e.getCellSet('AllCells')
+	expression = np.zeros([len(genes), len(cells)])
+	# TODO time this, is it slow?
+	for (cidx, cell_row) in enumerate(e.getCellsExpressionCountsForGenes(cells, genes)):
+		for gid, expression_val in cell_row:
+			gidx = genes.index(gid)
+			expression[gidx, cidx] = expression_val
 
 	if not unexpressed_genes:
 		genes_expressed = expression.any(axis=1)
@@ -126,12 +124,11 @@ def parse_exp_data(cells=(), genes=(), limit=0, unexpressed_genes=False):
 		expression = expression[:limit]
 
 	cell_data = []
-	for idx, cell in enumerate(em_cells):
+	for idx, cell in enumerate(cells):
 		cell_data.append({
-			"cellname": cell.name,
+			"cellname": e.getCellMetaDataValue(cell, "CellName"),
 			"e": list(expression[:, idx]),
 		})
-
 	return {
 		"genes": genes,
 		"cells": cell_data,
@@ -152,7 +149,7 @@ def make_payload(data, errormessage="", errorcode=200):
 
 
 def parse_querystring(qs):
-	schema = parse_schema(os.path.join(application.config["SCHEMAS_DIR"], "test_data_schema.json"))
+	schema = parse_schema(os.path.join(application.config["SCHEMAS_DIR"], application.config["SCHEMA_FILE"]))
 	query = {}
 	for key in qs:
 		if key == "_nograph":
@@ -212,9 +209,14 @@ def get_metadata_ranges(schema, metadata):
 						options[s]["range"]["min"] = datum
 					if not options[s]["range"]["max"] or datum > options[s]["range"]["max"]:
 						options[s]["range"]["max"] = datum
-			except KeyError:
+			except KeyError as e:
+				print("KeyError")
+				pass
+			except ValueError:
+				print("ValueError")
 				pass
 			except TypeError:
+				print("TypeError")
 				pass
 
 	return options
@@ -228,8 +230,10 @@ def normalize_verticies(verticies):
 		labels.append(v.cellId)
 		x.append(v.x())
 		y.append(v.y())
-	x = normalize(x)
-	y = normalize(y)
+	if x:
+		x = normalize(x)
+	if y:
+		y = normalize(y)
 	return {
 		"labels": labels,
 		"x": x,
@@ -260,6 +264,8 @@ def convert_variable(datatype, variable):
 		print("Bad conversion")
 		raise
 
+def getCellName(cellid):
+	e.getCellMetaDataValue(cellid, "CellName")
 
 # ---- Traditional Routes -----
 @application.route('/')
@@ -399,6 +405,8 @@ class MetadataAPI(Resource):
 	def post(self):
 		args = self.parser.parse_args()
 		cell_list = args.celllist
+		if cell_list:
+			cell_list = [e.cellIdFromString(i) for i in cell_list]
 		metadata = parse_metadata(cell_list)
 		if cell_list and len(metadata['cell_metadata']) < len(cell_list):
 			return make_payload([], "Some cell ids not available", 400)
@@ -513,7 +521,15 @@ class ExpressionAPI(Resource):
 	def post(self):
 		args = self.parser.parse_args()
 		cell_list = args.get('celllist', [])
+		if cell_list:
+			cell_list = [e.cellIdFromString(name) for name in cell_list]
+		else:
+			cell_list = []
 		gene_list = args.get('genelist', [])
+		if gene_list:
+			gene_list = [e.geneIdFromName(name) for name in gene_list]
+		else:
+			gene_list = []
 		unexpressed_genes = args.get('include_unexpressed_genes', False)
 		if not (cell_list) and not (gene_list):
 			return make_payload([], "must include celllist and/or genelist parameter", 400)
@@ -642,14 +658,14 @@ class CellsAPI(Resource):
 	})
 	def get(self):
 		# TODO Allow random downsampling
-
-		e = pyEM2.ExpressionMatrix.from_existing_directory(application.config["DATA_DIR"])
+		e = ExpressionMatrix(application.config["DATA_DIR"], True)
 		data = {
 			"reactive": False,
 			"cellids": [],
 			"metadata": [],
 			"cellcount": 0,
 			"badmetadatacount": 0,
+			"graph": [],
 			"ranges": {}
 		}
 		try:
@@ -660,28 +676,69 @@ class CellsAPI(Resource):
 			qs = parse_querystring(request.args)
 		except QueryStringError as e:
 			return make_payload({}, str(e), 400)
-
-
-		schema = parse_schema(os.path.join(application.config["SCHEMAS_DIR"], "test_data_schema.json"))
+		schema = parse_schema(os.path.join(application.config["SCHEMAS_DIR"], application.config["SCHEMA_FILE"]))
 		keptcells = []
+		output_cellset = "outcellset2"
 		if len(qs):
-			keptcells = [cell for cell in e.cells if filter(cell, qs)]
+			# TODO catch errors
+			error = False
+			filters = []
+			for key, value in qs.items():
+				if value["variabletype"] == 'categorical':
+					category_filter = []
+					for idx, item in enumerate(value["query"]):
+						queryval = escape(item)
+						filtername = "{}_{}".format(key, idx)
+						e.createCellSetUsingMetaData(filtername, key, queryval, False)
+						category_filter.append(filtername)
+					category_output_filter = "{}_out".format(key)
+					e.createCellSetUnion(",".join(category_filter), category_output_filter)
+					filters.append(category_output_filter)
+					for cellset in category_filter:
+						e.removeCellSet(cellset)
+				elif value["variabletype"] == 'continuous':
+					filtername = "{}".format(key)
+					filters.append(filtername)
+					if value["query"]["min"] and value["query"]["max"]:
+						e.createCellSetUsingNumericMetaDataBetween(filtername, key, value["query"]["min"],
+																   value["query"]["max"])
+					elif value["query"]["min"]:
+						e.createCellSetUsingNumericMetaDataGreaterThan(filtername, key, value["query"]["min"])
+					elif value["query"]["max"]:
+						e.createCellSetUsingNumericMetaDataLessThan(filtername, key, value["query"]["max"])
+					else:
+						filters.pop(filters.index(filtername))
+			e.createCellSetIntersection(",".join(filters), output_cellset)
+			keptcells = parse_metadata(e.getCellSet(output_cellset))["cell_metadata"]
+			for cellset in filters:
+				e.removeCellSet(cellset)
 		else:
-			keptcells = e.cells
-		keptcell_ids = [m.name for m in keptcells]
-		metadata = parse_metadata(keptcell_ids)["cell_metadata"]
-		ranges = get_metadata_ranges(schema, metadata)
-		data["cellcount"] = len(keptcell_ids)
-		graph = None
-		if not nograph:
-			sps = e.create_similar_pairs(0, 10, 512, 42)
-			cg = e.create_cell_graph(0, 5, sps)
-			graph = [(v.cell.name, v.x, v.y) for v in cg.vertices]
+			keptcells = metadata
+			output_cellset = "AllCells"
+		try:
+			ranges = get_metadata_ranges(schema, keptcells)
+			data["ranges"] = ranges
+			data["cellcount"] = len(keptcells)
+			graph = None
+			if not nograph:
+				os.chdir(application.config['DATA_DIR'])
+				graphname = "cellgraph"
+				e.createCellGraph(graphname, output_cellset, 'ExactHighInformationGenes')
+				e.computeCellGraphLayout(graphname)
+				vertices = e.getCellGraphVertices(graphname)
+				normalized_verticies = normalize_verticies(vertices)
+				graph = [
+					(e.getCellMetaDataValue(normalized_verticies["labels"][i], 'CellName'), normalized_verticies["x"][i],
+					 normalized_verticies["y"][i])
+					for i in range(len(normalized_verticies["labels"]))]
+				print(graph)
+		finally:
+			if output_cellset != "AllCells":
+				e.removeCellSet(output_cellset)
 		if data["cellcount"] <= REACTIVE_LIMIT:
 			data["reactive"] = True
-			data["metadata"] = metadata
-			data["cellids"] = [m.name for m in keptcells]
-			data["ranges"] = ranges
+			data["metadata"] = keptcells
+			data["cellids"] = [m["CellName"] for m in keptcells]
 			data["graph"] = graph
 		return make_payload(data)
 
@@ -767,7 +824,7 @@ class InitializeAPI(Resource):
 		}
 	})
 	def get(self):
-		schema = parse_schema(os.path.join(application.config["SCHEMAS_DIR"], "test_data_schema.json"))
+		schema = parse_schema(os.path.join(application.config["SCHEMAS_DIR"], application.config["SCHEMA_FILE"]))
 		metadata = parse_metadata()["cell_metadata"]
 		options = get_metadata_ranges(schema, metadata)
 		return make_payload({"schema": schema, "options": options, "cellcount": len(metadata)})
