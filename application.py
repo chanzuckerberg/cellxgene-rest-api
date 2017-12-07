@@ -210,13 +210,10 @@ def get_metadata_ranges(schema, metadata):
 					if not options[s]["range"]["max"] or datum > options[s]["range"]["max"]:
 						options[s]["range"]["max"] = datum
 			except KeyError as e:
-				print("KeyError")
 				pass
 			except ValueError:
-				print("ValueError")
 				pass
 			except TypeError:
-				print("TypeError")
 				pass
 
 	return options
@@ -713,17 +710,16 @@ class CellsAPI(Resource):
 			for cellset in filters:
 				e.removeCellSet(cellset)
 		else:
-			keptcells = metadata
 			output_cellset = "AllCells"
+			keptcells = parse_metadata(e.getCellSet(output_cellset))["cell_metadata"]
 		try:
 			ranges = get_metadata_ranges(schema, keptcells)
 			data["ranges"] = ranges
 			data["cellcount"] = len(keptcells)
 			graph = None
 			if not nograph:
-				os.chdir(application.config['DATA_DIR'])
 				graphname = "cellgraph"
-				e.createCellGraph(graphname, output_cellset, 'ExactHighInformationGenes')
+				e.createCellGraph(graphname, output_cellset, 'HighInformationGenes')
 				e.computeCellGraphLayout(graphname)
 				vertices = e.getCellGraphVertices(graphname)
 				normalized_verticies = normalize_verticies(vertices)
@@ -731,7 +727,6 @@ class CellsAPI(Resource):
 					(e.getCellMetaDataValue(normalized_verticies["labels"][i], 'CellName'), normalized_verticies["x"][i],
 					 normalized_verticies["y"][i])
 					for i in range(len(normalized_verticies["labels"]))]
-				print(graph)
 		finally:
 			if output_cellset != "AllCells":
 				e.removeCellSet(output_cellset)
