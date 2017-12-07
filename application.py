@@ -215,6 +215,9 @@ def get_metadata_ranges(schema, metadata):
 				pass
 			except TypeError:
 				pass
+	for key, value in dict(options).items():
+		if ("options" in value and not value["options"]) or ("range" in value and not value["range"]["max"]):
+			del options[key]
 
 	return options
 
