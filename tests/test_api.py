@@ -96,6 +96,7 @@ class EndPoints(unittest.TestCase):
 		result_json = result.json()
 		assert result_json["data"]["cellcount"] > 0
 		assert len(result_json["data"]["graph"])
+		assert len(result_json["data"]["graph"]) == result_json["data"]["cellcount"]
 
 	def test_cells_nograph (self):
 		url = "{base}{endpoint}?{params}".format(base=self.url_base, endpoint="cells", params="&".join(

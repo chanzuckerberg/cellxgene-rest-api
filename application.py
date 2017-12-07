@@ -706,16 +706,14 @@ class CellsAPI(Resource):
 					else:
 						filters.pop(filters.index(filtername))
 			e.createCellSetIntersection(",".join(filters), output_cellset)
-			keptcells = parse_metadata(e.getCellSet(output_cellset))["cell_metadata"]
+			cellidlist = e.getCellSet(output_cellset)
+
 			for cellset in filters:
 				e.removeCellSet(cellset)
 		else:
 			output_cellset = "AllCells"
-			keptcells = parse_metadata(e.getCellSet(output_cellset))["cell_metadata"]
+			cellidlist = e.getCellSet(output_cellset)
 		try:
-			ranges = get_metadata_ranges(schema, keptcells)
-			data["ranges"] = ranges
-			data["cellcount"] = len(keptcells)
 			graph = None
 			if not nograph:
 				graphname = "cellgraph"
@@ -723,10 +721,18 @@ class CellsAPI(Resource):
 				e.computeCellGraphLayout(graphname)
 				vertices = e.getCellGraphVertices(graphname)
 				normalized_verticies = normalize_verticies(vertices)
-				graph = [
-					(e.getCellMetaDataValue(normalized_verticies["labels"][i], 'CellName'), normalized_verticies["x"][i],
-					 normalized_verticies["y"][i])
-					for i in range(len(normalized_verticies["labels"]))]
+				graph = []
+				# reset cellids if create the graph
+				cellidlist = []
+				for i in range(len(normalized_verticies["labels"])):
+					graph.append((e.getCellMetaDataValue(normalized_verticies["labels"][i], 'CellName'), normalized_verticies["x"][i],
+					 normalized_verticies["y"][i]))
+					cellidlist.append(normalized_verticies["labels"][i])
+			keptcells = parse_metadata(cellidlist)["cell_metadata"]
+			ranges = get_metadata_ranges(schema, keptcells)
+			data["ranges"] = ranges
+			data["cellcount"] = len(keptcells)
+
 		finally:
 			if output_cellset != "AllCells":
 				e.removeCellSet(output_cellset)
