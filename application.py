@@ -104,12 +104,15 @@ def parse_metadata(cells=False):
 def cast_value(key, value):
 	val_type = schema[key]["type"]
 	new_val = value
-	if val_type == "int":
-		new_val = int(value)
-	elif val_type == "float":
-		new_val = float(value)
+	try:
+		if val_type == "int":
+			new_val = int(value)
+		elif val_type == "float":
+			new_val = float(value)
+	except ValueError:
+		pass
 	if value == "":
-		value = None
+		new_val = None
 	return new_val
 
 
