@@ -699,7 +699,7 @@ class CellsAPI(Resource):
 				if value["variabletype"] == 'categorical':
 					category_filter = []
 					for idx, item in enumerate(value["query"]):
-						queryval = escape(item)
+						queryval = item
 						filtername = "{}_{}".format(key, idx)
 						e.createCellSetUsingMetaData(filtername, key, queryval, False)
 						category_filter.append(filtername)
