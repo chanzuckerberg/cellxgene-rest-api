@@ -68,7 +68,7 @@ cluster_parser = reqparse.RequestParser()
 cluster_parser.add_argument('clustername', type=str, required=True, help="Name of cell graph")
 
 e = ExpressionMatrix(application.config["DATA_DIR"], True)
-
+schema = parse_schema(os.path.join(application.config["SCHEMAS_DIR"], application.config["SCHEMA_FILE"]))
 
 # ---- Helper Functions -------
 
@@ -92,14 +92,25 @@ def filter(cell, qs):
 	return keep
 
 def parse_metadata(cells=False):
-	# Done
-	mdata = []
+	metadata = []
 	if cells == False:
 		cells = e.getCellSet('AllCells')
 	if INVALIDCELLID not in cells:
 		mdata = e.getCellsMetaData(cells)
-		mdata = [{k:v for k,v in i} for i in mdata]
-	return {"cell_metadata": mdata}
+		for i in mdata:
+			metadata.append({k:cast_value(k,v) for k,v in i})
+	return metadata
+
+def cast_value(key, value):
+	val_type = schema[key]["type"]
+	new_val = value
+	if val_type == "int":
+		new_val = int(value)
+	elif val_type == "float":
+		new_val = float(value)
+	if value == "":
+		value = None
+	return new_val
 
 
 def parse_exp_data(cells=(), genes=(), limit=0, unexpressed_genes=False):
@@ -149,7 +160,6 @@ def make_payload(data, errormessage="", errorcode=200):
 
 
 def parse_querystring(qs):
-	schema = parse_schema(os.path.join(application.config["SCHEMAS_DIR"], application.config["SCHEMA_FILE"]))
 	query = {}
 	for key in qs:
 		if key == "_nograph":
@@ -181,7 +191,7 @@ def parse_querystring(qs):
 	return query
 
 
-def get_metadata_ranges(schema, metadata):
+def get_metadata_ranges(metadata):
 	options = {}
 	for s in schema:
 		options[s] = {}
@@ -408,9 +418,9 @@ class MetadataAPI(Resource):
 		if cell_list:
 			cell_list = [e.cellIdFromString(i) for i in cell_list]
 		metadata = parse_metadata(cell_list)
-		if cell_list and len(metadata['cell_metadata']) < len(cell_list):
+		if cell_list and len(metadata) < len(cell_list):
 			return make_payload([], "Some cell ids not available", 400)
-		return make_payload(metadata)
+		return make_payload({"cell_metadata": metadata})
 
 
 class ExpressionAPI(Resource):
@@ -676,7 +686,6 @@ class CellsAPI(Resource):
 			qs = parse_querystring(request.args)
 		except QueryStringError as e:
 			return make_payload({}, str(e), 400)
-		schema = parse_schema(os.path.join(application.config["SCHEMAS_DIR"], application.config["SCHEMA_FILE"]))
 		keptcells = []
 		output_cellset = "outcellset2"
 		if len(qs):
@@ -731,8 +740,8 @@ class CellsAPI(Resource):
 					graph.append((e.getCellMetaDataValue(normalized_verticies["labels"][i], 'CellName'), normalized_verticies["x"][i],
 					 normalized_verticies["y"][i]))
 					cellidlist.append(normalized_verticies["labels"][i])
-			keptcells = parse_metadata(cellidlist)["cell_metadata"]
-			ranges = get_metadata_ranges(schema, keptcells)
+			keptcells = parse_metadata(cellidlist)
+			ranges = get_metadata_ranges(keptcells)
 			data["ranges"] = ranges
 			data["cellcount"] = len(keptcells)
 
@@ -828,9 +837,8 @@ class InitializeAPI(Resource):
 		}
 	})
 	def get(self):
-		schema = parse_schema(os.path.join(application.config["SCHEMAS_DIR"], application.config["SCHEMA_FILE"]))
-		metadata = parse_metadata()["cell_metadata"]
-		options = get_metadata_ranges(schema, metadata)
+		metadata = parse_metadata()
+		options = get_metadata_ranges(metadata)
 		return make_payload({"schema": schema, "options": options, "cellcount": len(metadata)})
 
 

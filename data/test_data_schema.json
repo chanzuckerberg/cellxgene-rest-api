@@ -109,14 +109,45 @@
 		"variabletype": "continuous",
 		"displayname": "Genes Detected"
 	},
-	"Neoplastic": {
-		"type": "string",
+	"housekeeping_cluster": {
+		"type": "int",
 		"variabletype": "categorical",
-		"displayname": "Neoplastic"
+		"displayname": "Housekeeping Cluster"
 	},
-	"Class": {
-		"type": "string",
-		"variabletype": "categorical",
-		"displayname": "Class"
-	}
+    "housekeeping_cluster_color": {
+            "type": "string",
+            "variabletype": "categorical",
+            "displayname": "Housekeeping Cluster Color"
+        },
+    "Sample.type.color": {
+            "type": "string",
+            "variabletype": "categorical",
+            "displayname": "Sample Type Color"
+        },
+    "Selection.color": {
+            "type": "string",
+            "variabletype": "categorical",
+            "displayname": "Selection Color"
+        },
+    "Sample.name.color": {
+            "type": "string",
+            "variabletype": "categorical",
+            "displayname": "Sample Name Color"
+        },
+    "Location.color": {
+            "type": "string",
+            "variabletype": "categorical",
+            "displayname": "Location Color"
+        },
+    "Cluster_2d": {
+            "type": "int",
+            "variabletype": "categorical",
+            "displayname": "Cluster2d"
+        },
+    "Cluster_2d_color": {
+            "type": "string",
+            "variabletype": "categorical",
+            "displayname": "Cluster2d Color"
+        }
+
 }
