@@ -112,7 +112,7 @@ def cast_value(key, value):
 	except ValueError:
 		pass
 	if value == "":
-		new_val = None
+		new_val = ""
 	return new_val
 
 
@@ -708,11 +708,16 @@ class CellsAPI(Resource):
 			for key, value in qs.items():
 				if value["variabletype"] == 'categorical':
 					category_filter = []
-					for idx, item in enumerate(value["query"]):
-						queryval = item
-						filtername = "{}_{}".format(key, idx)
-						e.createCellSetUsingMetaData(filtername, key, queryval, False)
+					if value["query"] == [""]:
+						filtername = "{}".format(key)
+						e.createCellSetUsingMetaData(filtername, key, "^$", True)
 						category_filter.append(filtername)
+					else:
+						for idx, item in enumerate(value["query"]):
+							queryval = item
+							filtername = "{}_{}".format(key, idx)
+							e.createCellSetUsingMetaData(filtername, key, queryval, False)
+							category_filter.append(filtername)
 					category_output_filter = "{}_out".format(key)
 					e.createCellSetUnion(",".join(category_filter), category_output_filter)
 					filters.append(category_output_filter)
@@ -732,7 +737,6 @@ class CellsAPI(Resource):
 						filters.pop(filters.index(filtername))
 			e.createCellSetIntersection(",".join(filters), output_cellset)
 			cellidlist = e.getCellSet(output_cellset)
-
 			for cellset in filters:
 				e.removeCellSet(cellset)
 		else:
@@ -742,7 +746,6 @@ class CellsAPI(Resource):
 			graph = None
 			if not nograph:
 				graphname = "cellgraph"
-				print(includeisolated)
 				e.createCellGraph(graphname, output_cellset, 'HighInformationGenes', keepIsolatedVertices=includeisolated)
 				e.computeCellGraphLayout(graphname)
 				vertices = e.getCellGraphVertices(graphname)
@@ -758,7 +761,6 @@ class CellsAPI(Resource):
 			ranges = get_metadata_ranges(keptcells)
 			data["ranges"] = ranges
 			data["cellcount"] = len(keptcells)
-			print(data["cellcount"])
 
 		finally:
 			if output_cellset != "AllCells":
