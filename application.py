@@ -165,7 +165,7 @@ def make_payload(data, errormessage="", errorcode=200):
 def parse_querystring(qs):
 	query = {}
 	for key in qs:
-		if key == "_nograph":
+		if key in ["_nograph", "_includeisolated"]:
 			continue
 		value = qs.getlist(key)
 		if key not in schema:
@@ -588,7 +588,14 @@ class CellsAPI(Resource):
 			'description': "Do not calculate and send back graph (graph is sent by default)",
 			'in': 'path',
 			'type': 'boolean',
-		}],
+		},
+			{
+				'name': '_includeisolated',
+				'description': "Include all cells in graph even if cluster is too small, this does nothing if _nograph is true.",
+				'in': 'path',
+				'type': 'boolean',
+			}
+		],
 
 		'responses': {
 			'200': {
@@ -684,8 +691,11 @@ class CellsAPI(Resource):
 		try:
 			args = request.args
 			nograph = False
+			includeisolated = False
 			if "_nograph" in args:
 				nograph = bool(args["_nograph"])
+			if "_includeisolated" in args:
+				includeisolated = bool(args["_includeisolated"])
 			qs = parse_querystring(request.args)
 		except QueryStringError as e:
 			return make_payload({}, str(e), 400)
@@ -732,7 +742,8 @@ class CellsAPI(Resource):
 			graph = None
 			if not nograph:
 				graphname = "cellgraph"
-				e.createCellGraph(graphname, output_cellset, 'HighInformationGenes')
+				print(includeisolated)
+				e.createCellGraph(graphname, output_cellset, 'HighInformationGenes', keepIsolatedVertices=includeisolated)
 				e.computeCellGraphLayout(graphname)
 				vertices = e.getCellGraphVertices(graphname)
 				normalized_verticies = normalize_verticies(vertices)
@@ -747,6 +758,7 @@ class CellsAPI(Resource):
 			ranges = get_metadata_ranges(keptcells)
 			data["ranges"] = ranges
 			data["cellcount"] = len(keptcells)
+			print(data["cellcount"])
 
 		finally:
 			if output_cellset != "AllCells":
