@@ -56,7 +56,6 @@ class EndPoints(unittest.TestCase):
 		result_json_unexpressed = result.json()
 		assert len(result_json["data"]['genes']) < len(result_json_unexpressed["data"]['genes'])
 
-
 	def test_heatmap_post_genelist(self):
 		url = "{base}{endpoint}".format(base=self.url_base, endpoint="expression")
 		result = self.session.post(url, data={"genelist": ["ABCD4"]})
@@ -98,7 +97,7 @@ class EndPoints(unittest.TestCase):
 		assert len(result_json["data"]["graph"])
 		assert len(result_json["data"]["graph"]) == result_json["data"]["cellcount"]
 
-	def test_cells_nograph (self):
+	def test_cells_nograph(self):
 		url = "{base}{endpoint}?{params}".format(base=self.url_base, endpoint="cells", params="&".join(
 			["Selection=Unpanned", "ERCC_reads=150000,170000", "_nograph=True"]))
 		result = self.session.get(url)
@@ -119,3 +118,35 @@ class EndPoints(unittest.TestCase):
 			["Selection=Unpanned", "ERCC_reads=150000"]))
 		result = self.session.get(url)
 		assert result.status_code == 400
+
+	def test_diff_expression(self):
+		url = "{base}{endpoint}".format(base=self.url_base, endpoint="diffexpression")
+		result = self.session.post(url, data={"celllist": ["1001000010.C5",
+														"1001000010.C8",
+														"1001000010.D5",
+														"1001000010.D9",
+														"1001000010.E8",
+														"1001000010.F1",
+														"1001000010.F10",
+														"1001000010.F7",
+														"1001000010.F8",
+														"1001000010.G2",
+														"1001000010.G3",
+														"1001000010.H3",
+														"1001000012.A1",
+														"1001000012.A10"
+														],
+											"celllist2": ["1001000012.H4",
+															"1001000012.H5",
+															"1001000012.H6",
+															"1001000012.H7",
+															"1001000012.H8",
+															"1001000012.H9",
+															"1001000014.B2",
+															"1001000014.C1",
+															"1001000014.C3"],
+											"num_genes": 5})
+		assert result.status_code == 200
+		result_json = result.json()
+		assert 'data' in result_json
+		assert len(result_json['data']['top_genes_cellset1']) == 5

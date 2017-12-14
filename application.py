@@ -64,8 +64,14 @@ expression_parser.add_argument('genelist', type=str, action="append", required=F
 expression_parser.add_argument('include_unexpressed_genes', type=bool, required=False,
 							   help='Include genes with zero expression across cell set')
 
-cluster_parser = reqparse.RequestParser()
-cluster_parser.add_argument('clustername', type=str, required=True, help="Name of cell graph")
+# cluster_parser = reqparse.RequestParser()
+# cluster_parser.add_argument('clustername', type=str, required=True, help="Name of cell graph")
+
+differential_parser = reqparse.RequestParser()
+differential_parser.add_argument('celllist', type=str, action="append", required=True, help='First group of cells by id')
+differential_parser.add_argument('celllist2', type=str, action="append", required=False, help='Second group of cells by id')
+differential_parser.add_argument('num_genes', type=int, required=False, default=10,
+						  help="Number of diff-expressed genes to return")
 
 e = ExpressionMatrix(application.config["DATA_DIR"], True)
 schema = parse_schema(os.path.join(application.config["SCHEMAS_DIR"], application.config["SCHEMA_FILE"]))
@@ -577,6 +583,104 @@ class ExpressionAPI(Resource):
 # 		return make_payload({clustername: clustername}, errorcode=201)
 
 
+class DifferentialExpressionAPI(Resource):
+	def __init__(self):
+		self.parser = differential_parser
+
+	@swagger.doc({
+		'summary': 'Get the top expressed genes for two cell sets. Calculated using t-test',
+		'tags': ['expression'],
+		'parameters': [
+			{
+				'name': 'body',
+				'in': 'body',
+				'schema': {
+					"example": {
+						"celllist": [
+							"1001000010.C8",
+							"1001000010.D5",
+							"1001000010.D9",
+
+						],
+						"celllist2": [
+							"1001000012.H4",
+							"1001000012.H5",
+							"1001000012.H6",
+						],
+						"num_genes": 5
+					}
+				}
+			}
+		],
+		"responses": {
+			'200': {
+				'description': 'top expressed genes for cellset1, cellset2',
+				'examples': {
+					'application/json': {
+						"data": {
+							"top_genes_cellset1": [
+								"SAT1",
+								"FTL",
+								"RPS16",
+								"SRGN",
+								"CTSS"
+							],
+							"top_genes_cellset2": [
+								"CLU",
+								"COX7C",
+								"CKB",
+								"LOC550643",
+								"TUBA1A"
+							]
+						},
+						"status": {
+							"error": False,
+							"errormessage": "",
+						}
+					}
+				}
+			},
+		}
+	})
+	def post(self):
+		args = self.parser.parse_args()
+		# TODO allow different calculation methods
+		# get 2 cell sets
+		cell_list = args.get('celllist', [])
+		cell_list2 = args.get('celllist2', [])
+		num_genes = args.get("num_genes")
+		if cell_list:
+			cell_list = [e.cellIdFromString(name) for name in cell_list]
+		if cell_list2:
+			cell_list2 = [e.cellIdFromString(name) for name in cell_list2]
+		# TODO else get reverse
+
+		gene_counts_1 = e.getCellsExpressionCounts(cell_list)
+		gene_counts_2 = e.getCellsExpressionCounts(cell_list2)
+
+		# reformat to np arrays
+		expression = np.zeros([e.geneCount(), len(cell_list)])
+		for cidx, gene_list in enumerate(gene_counts_1):
+			for (gidx, val) in gene_list:
+				expression[gidx, cidx] = val
+
+		expression_2= np.zeros([e.geneCount(), len(cell_list2)])
+		for cidx, gene_list in enumerate(gene_counts_2):
+			for (gidx, val) in gene_list:
+				expression_2[gidx, cidx] = val
+		# t-test between cell sets
+		from scipy import stats
+		# TODO make sure genes aren't nans
+		diff_exp = stats.ttest_ind(expression, expression_2, axis=1)
+		set1 = np.argsort(diff_exp.statistic)[::-1]
+		set1 = np.roll(set1, -np.count_nonzero(np.isnan(diff_exp.statistic)))[:num_genes]
+		set2 = np.argsort(diff_exp.statistic)[:num_genes]
+		genes_cellset1 = [e.geneName(gid) for gid in set1]
+		genes_cellset2 = [e.geneName(gid) for gid in set2]
+		# TODO also return statistic value
+		# return top expressed genes
+		return make_payload({"top_genes_cellset1": genes_cellset1, "top_genes_cellset2": genes_cellset2})
+
 class CellsAPI(Resource):
 	@swagger.doc({
 		'summary': 'filter based on metadata fields to get a subset cells, expression data, and metadata',
@@ -863,6 +967,7 @@ api.add_resource(MetadataAPI, "/api/v0.1/metadata")
 api.add_resource(ExpressionAPI, "/api/v0.1/expression")
 api.add_resource(InitializeAPI, "/api/v0.1/initialize")
 api.add_resource(CellsAPI, "/api/v0.1/cells")
+api.add_resource(DifferentialExpressionAPI, "/api/v0.1/diffexpression")
 # api.add_resource(ClusterAPI, "/api/v0.1/cluster")
 
 if __name__ == "__main__":
