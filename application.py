@@ -68,9 +68,9 @@ expression_parser.add_argument('include_unexpressed_genes', type=bool, required=
 # cluster_parser.add_argument('clustername', type=str, required=True, help="Name of cell graph")
 
 differential_parser = reqparse.RequestParser()
-differential_parser.add_argument('celllist', type=str, action="append", required=True, help='First group of cells by id')
+differential_parser.add_argument('celllist1', type=str, action="append", required=True, help='First group of cells by id')
 differential_parser.add_argument('celllist2', type=str, action="append", required=False, help='Second group of cells by id')
-differential_parser.add_argument('num_genes', type=int, required=False, default=10,
+differential_parser.add_argument('num_genes', type=int, required=False, default=20,
 						  help="Number of diff-expressed genes to return")
 
 e = ExpressionMatrix(application.config["DATA_DIR"], True)
@@ -596,7 +596,7 @@ class DifferentialExpressionAPI(Resource):
 				'in': 'body',
 				'schema': {
 					"example": {
-						"celllist": [
+						"celllist1": [
 							"1001000010.C8",
 							"1001000010.D5",
 							"1001000010.D9",
@@ -618,20 +618,16 @@ class DifferentialExpressionAPI(Resource):
 				'examples': {
 					'application/json': {
 						"data": {
-							"top_genes_cellset1": [
-								"SAT1",
-								"FTL",
-								"RPS16",
-								"SRGN",
-								"CTSS"
-							],
-							"top_genes_cellset2": [
-								"CLU",
-								"COX7C",
-								"CKB",
-								"LOC550643",
-								"TUBA1A"
-							]
+							"celllist1": {
+								"topgenes": [],
+								"expression": [],
+								"meanexpression": [],
+							},
+							"celllist2": {
+								"topgenes": [],
+								"expression": [],
+								"meanexpression": [],
+							}
 						},
 						"status": {
 							"error": False,
@@ -646,40 +642,55 @@ class DifferentialExpressionAPI(Resource):
 		args = self.parser.parse_args()
 		# TODO allow different calculation methods
 		# get 2 cell sets
-		cell_list = args.get('celllist', [])
-		cell_list2 = args.get('celllist2', [])
+		cell_list_1 = args.get('celllist1', [])
+		cell_list_2 = args.get('celllist2', [])
 		num_genes = args.get("num_genes")
-		if cell_list:
-			cell_list = [e.cellIdFromString(name) for name in cell_list]
-		if cell_list2:
-			cell_list2 = [e.cellIdFromString(name) for name in cell_list2]
+		if cell_list_1:
+			cell_list_1 = [e.cellIdFromString(name) for name in cell_list_1]
+		if cell_list_2:
+			cell_list_2 = [e.cellIdFromString(name) for name in cell_list_2]
 		# TODO else get reverse
 
-		gene_counts_1 = e.getCellsExpressionCounts(cell_list)
-		gene_counts_2 = e.getCellsExpressionCounts(cell_list2)
+		gene_counts_1 = e.getCellsExpressionCounts(cell_list_1)
+		gene_counts_2 = e.getCellsExpressionCounts(cell_list_2)
 
 		# reformat to np arrays
-		expression = np.zeros([e.geneCount(), len(cell_list)])
+		expression_1 = np.zeros([e.geneCount(), len(cell_list_1)])
 		for cidx, gene_list in enumerate(gene_counts_1):
 			for (gidx, val) in gene_list:
-				expression[gidx, cidx] = val
+				expression_1[gidx, cidx] = val
 
-		expression_2= np.zeros([e.geneCount(), len(cell_list2)])
+		expression_2 = np.zeros([e.geneCount(), len(cell_list_2)])
 		for cidx, gene_list in enumerate(gene_counts_2):
 			for (gidx, val) in gene_list:
 				expression_2[gidx, cidx] = val
+
+		expression_1_average = np.mean(expression_1, axis=1)
+		expression_2_average = np.mean(expression_2, axis=1)
 		# t-test between cell sets
 		from scipy import stats
 		# TODO make sure genes aren't nans
-		diff_exp = stats.ttest_ind(expression, expression_2, axis=1)
+		diff_exp = stats.ttest_ind(expression_1, expression_2, axis=1)
 		set1 = np.argsort(diff_exp.statistic)[::-1]
 		set1 = np.roll(set1, -np.count_nonzero(np.isnan(diff_exp.statistic)))[:num_genes]
 		set2 = np.argsort(diff_exp.statistic)[:num_genes]
-		genes_cellset1 = [e.geneName(gid) for gid in set1]
-		genes_cellset2 = [e.geneName(gid) for gid in set2]
+		genes_cellset_1 = [e.geneName(gid) for gid in set1]
+		genes_cellset_2 = [e.geneName(gid) for gid in set2]
 		# TODO also return statistic value
 		# return top expressed genes
-		return make_payload({"top_genes_cellset1": genes_cellset1, "top_genes_cellset2": genes_cellset2})
+		return make_payload({
+			"celllist1": {
+				"topgenes": genes_cellset_1,
+				"expression": expression_1.tolist(),
+				"meanexpression": expression_1_average.tolist(),
+			},
+			"celllist2": {
+				"topgenes": genes_cellset_2,
+				"expression": expression_1.tolist(),
+				"meanexpression": expression_1_average.tolist(),
+				"meanexpression": expression_2_average.tolist(),
+			}
+		})
 
 class CellsAPI(Resource):
 	@swagger.doc({

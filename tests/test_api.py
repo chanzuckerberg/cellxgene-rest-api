@@ -121,7 +121,7 @@ class EndPoints(unittest.TestCase):
 
 	def test_diff_expression(self):
 		url = "{base}{endpoint}".format(base=self.url_base, endpoint="diffexpression")
-		result = self.session.post(url, data={"celllist": ["1001000010.C5",
+		result = self.session.post(url, data={"celllist1": ["1001000010.C5",
 														"1001000010.C8",
 														"1001000010.D5",
 														"1001000010.D9",
@@ -149,4 +149,4 @@ class EndPoints(unittest.TestCase):
 		assert result.status_code == 200
 		result_json = result.json()
 		assert 'data' in result_json
-		assert len(result_json['data']['top_genes_cellset1']) == 5
+		assert len(result_json['data']["celllist1"]['topgenes']) == 5
