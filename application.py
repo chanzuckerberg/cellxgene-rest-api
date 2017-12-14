@@ -124,25 +124,15 @@ def cast_value(key, value):
 
 def parse_exp_data(cells=(), genes=(), limit=0, unexpressed_genes=False):
 	if not genes:
-		genes = [i for i in range(e.geneCount())]
+		genes = allGenes()
 	if not cells:
-		cells = e.getCellSet('AllCells')
-	expression = np.zeros([len(genes), len(cells)])
-	# TODO time this, is it slow?
-	for (cidx, cell_row) in enumerate(e.getCellsExpressionCountsForGenes(cells, genes)):
-		for gid, expression_val in cell_row:
-			gidx = genes.index(gid)
-			expression[gidx, cidx] = expression_val
-
+		cells = allCells()
+	expression = get_expression(cells, genes)
 	if not unexpressed_genes:
-		genes_expressed = expression.any(axis=1)
-		genes = [genes[idx] for idx, val in enumerate(genes_expressed) if val]
-		expression = expression[genes_expressed]
-
+		expression, genes = remove_unexpressed_genes(expression, genes)
 	if limit and len(genes) > limit:
 		genes = genes[:limit]
 		expression = expression[:limit]
-
 	cell_data = []
 	for idx, cell in enumerate(cells):
 		cell_data.append({
@@ -154,6 +144,28 @@ def parse_exp_data(cells=(), genes=(), limit=0, unexpressed_genes=False):
 		"cells": cell_data,
 		"nonzero_gene_count": int(np.sum(expression.any(axis=1)))
 	}
+
+def remove_unexpressed_genes(expression, genes):
+	genes_expressed = expression.any(axis=1)
+	genes = [genes[idx] for idx, val in enumerate(genes_expressed) if val]
+	return expression[genes_expressed], genes
+
+def get_expression(cells, genes = ()):
+	if not genes:
+		genes = allGenes()
+		expression = np.zeros([len(genes), len(cells)])
+
+		for (cidx, cell_row) in enumerate(e.getCellsExpressionCounts(cells)):
+			for gid, expression_val in cell_row:
+				expression[gid, cidx] = expression_val
+	else:
+		expression = np.zeros([len(genes), len(cells)])
+		for (cidx, cell_row) in enumerate(e.getCellsExpressionCountsForGenes(cells, genes)):
+			for gid, expression_val in cell_row:
+				gidx = genes.index(gid)
+				expression[gidx, cidx] = expression_val
+	return expression
+
 
 def make_payload(data, errormessage="", errorcode=200):
 	error = False
@@ -171,7 +183,7 @@ def make_payload(data, errormessage="", errorcode=200):
 def parse_querystring(qs):
 	query = {}
 	for key in qs:
-		if key in ["_nograph", "_includeisolated"]:
+		if key in ["_nograph", "_includeisolated", "_noexpression"]:
 			continue
 		value = qs.getlist(key)
 		if key not in schema:
@@ -259,6 +271,11 @@ def normalize_verticies(verticies):
 		"y": y
 	}
 
+def allGenes():
+	return [i for i in range(e.geneCount())]
+
+def allCells():
+	return e.getCellSet('AllCells')
 
 def normalize(v):
 	vec = np.array(v)
@@ -267,6 +284,16 @@ def normalize(v):
 		return vec
 	return vec / norm
 
+def diffexp(expression_1, expression_2, num_genes=20):
+	from scipy import stats
+	# TODO make sure genes aren't nans
+	diff_exp = stats.ttest_ind(expression_1, expression_2, axis=1)
+	set1 = np.argsort(diff_exp.statistic)[::-1]
+	set1 = np.roll(set1, -np.count_nonzero(np.isnan(diff_exp.statistic)))[:num_genes]
+	set2 = np.argsort(diff_exp.statistic)[:num_genes]
+	genes_cellset_1 = [e.geneName(gid) for gid in set1]
+	genes_cellset_2 = [e.geneName(gid) for gid in set2]
+	return genes_cellset_1, genes_cellset_2
 
 class QueryStringError(Exception):
 	pass
@@ -650,32 +677,13 @@ class DifferentialExpressionAPI(Resource):
 		if cell_list_2:
 			cell_list_2 = [e.cellIdFromString(name) for name in cell_list_2]
 		# TODO else get reverse
-
-		gene_counts_1 = e.getCellsExpressionCounts(cell_list_1)
-		gene_counts_2 = e.getCellsExpressionCounts(cell_list_2)
-
-		# reformat to np arrays
-		expression_1 = np.zeros([e.geneCount(), len(cell_list_1)])
-		for cidx, gene_list in enumerate(gene_counts_1):
-			for (gidx, val) in gene_list:
-				expression_1[gidx, cidx] = val
-
-		expression_2 = np.zeros([e.geneCount(), len(cell_list_2)])
-		for cidx, gene_list in enumerate(gene_counts_2):
-			for (gidx, val) in gene_list:
-				expression_2[gidx, cidx] = val
-
+		expression_1 = get_expression(cell_list_1, allGenes())
+		expression_2 = get_expression(cell_list_2, allGenes())
 		expression_1_average = np.mean(expression_1, axis=1)
 		expression_2_average = np.mean(expression_2, axis=1)
 		# t-test between cell sets
-		from scipy import stats
 		# TODO make sure genes aren't nans
-		diff_exp = stats.ttest_ind(expression_1, expression_2, axis=1)
-		set1 = np.argsort(diff_exp.statistic)[::-1]
-		set1 = np.roll(set1, -np.count_nonzero(np.isnan(diff_exp.statistic)))[:num_genes]
-		set2 = np.argsort(diff_exp.statistic)[:num_genes]
-		genes_cellset_1 = [e.geneName(gid) for gid in set1]
-		genes_cellset_2 = [e.geneName(gid) for gid in set2]
+		genes_cellset_1, genes_cellset_2 = diffexp(expression_1, expression_2, num_genes)
 		# TODO also return statistic value
 		# return top expressed genes
 		return make_payload({
@@ -687,17 +695,19 @@ class DifferentialExpressionAPI(Resource):
 			"celllist2": {
 				"topgenes": genes_cellset_2,
 				"expression": expression_1.tolist(),
-				"meanexpression": expression_1_average.tolist(),
 				"meanexpression": expression_2_average.tolist(),
 			}
 		})
+
+
 
 class CellsAPI(Resource):
 	@swagger.doc({
 		'summary': 'filter based on metadata fields to get a subset cells, expression data, and metadata',
 		'tags': ['cells'],
 		'description': "Cells takes query parameters definied in the schema retrieved from the /initialize enpoint. <br>For categorical metadata keys filter based on `key=value` <br>"
-					   " For continous  metadata keys filter by `key=min,max`<br> Either value can be replaced by a \*. To have only a minimum value `key=min,\*`  To have only a maximum value `key=\*,max` <br>Graph data (if retrieved) is normalized",
+					   " For continous  metadata keys filter by `key=min,max`<br> Either value can be replaced by a \*. To have only a minimum value `key=min,\*`  To have only a maximum value `key=\*,max` <br>Graph data (if retrieved) is normalized"
+					   " To only retrieve cells that don't have a value for the key filter by `key`",
 		'parameters': [{
 			'name': '_nograph',
 			'description': "Do not calculate and send back graph (graph is sent by default)",
@@ -801,14 +811,18 @@ class CellsAPI(Resource):
 			"cellcount": 0,
 			"badmetadatacount": 0,
 			"graph": [],
-			"ranges": {}
+			"ranges": {},
+			"expression": []
 		}
 		try:
 			args = request.args
 			nograph = False
 			includeisolated = False
+			noexpression = False
 			if "_nograph" in args:
 				nograph = bool(args["_nograph"])
+			if "_noexpression" in args:
+				noexpression = bool(args["_noexpression"])
 			if "_includeisolated" in args:
 				includeisolated = bool(args["_includeisolated"])
 			qs = parse_querystring(request.args)
@@ -859,7 +873,7 @@ class CellsAPI(Resource):
 			cellidlist = e.getCellSet(output_cellset)
 		try:
 			graph = None
-			if not nograph:
+			if not nograph and len(cellidlist) <= REACTIVE_LIMIT:
 				graphname = "cellgraph"
 				e.createCellGraph(graphname, output_cellset, 'HighInformationGenes', keepIsolatedVertices=includeisolated)
 				e.computeCellGraphLayout(graphname)
@@ -881,6 +895,10 @@ class CellsAPI(Resource):
 			if output_cellset != "AllCells":
 				e.removeCellSet(output_cellset)
 		if data["cellcount"] <= REACTIVE_LIMIT:
+			if not noexpression:
+				expression = get_expression(cellidlist)
+				expression_average = np.mean(expression, axis=1)
+				data["expression"] = expression_average.tolist()
 			data["reactive"] = True
 			data["metadata"] = keptcells
 			data["cellids"] = [m["CellName"] for m in keptcells]
