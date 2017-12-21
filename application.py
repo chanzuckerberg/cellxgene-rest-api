@@ -32,7 +32,6 @@ application.config.update(
 	GBM_DIR=os.path.join(dir_path, application.config["GBM_DIR"]),
 	SCRATCH_DIR=os.path.join(dir_path, application.config["SCRATCH_DIR"]),
 	DATA_DIR=os.path.join(dir_path, application.config["DATA_DIR"]),
-	SCHEMAS_DIR=os.path.join(dir_path, application.config["SCHEMAS_DIR"]),
 	EM2_DIR=os.path.join(dir_path, application.config["EM2_DIR"]),
 )
 
@@ -68,13 +67,15 @@ expression_parser.add_argument('include_unexpressed_genes', type=bool, required=
 # cluster_parser.add_argument('clustername', type=str, required=True, help="Name of cell graph")
 
 differential_parser = reqparse.RequestParser()
-differential_parser.add_argument('celllist1', type=str, action="append", required=True, help='First group of cells by id')
+differential_parser.add_argument('celllist1', type=str, action="append", required=False, help='First group of cells by id')
 differential_parser.add_argument('celllist2', type=str, action="append", required=False, help='Second group of cells by id')
+differential_parser.add_argument('clusters1', type=str, action="append", required=False, help='First group of cluters by name')
+differential_parser.add_argument('clusters2', type=str, action="append", required=False, help='Second group of clusters by name')
 differential_parser.add_argument('num_genes', type=int, required=False, default=20,
 						  help="Number of diff-expressed genes to return")
 
 e = ExpressionMatrix(application.config["DATA_DIR"], True)
-schema = parse_schema(os.path.join(application.config["SCHEMAS_DIR"], application.config["SCHEMA_FILE"]))
+schema = parse_schema(os.path.join(application.config["DATA_DIR"], application.config["SCHEMA_FILE"]))
 
 # ---- Helper Functions -------
 
@@ -151,10 +152,10 @@ def remove_unexpressed_genes(expression, genes):
 	return expression[genes_expressed], genes
 
 def get_expression(cells, genes = ()):
+	# TODO speed this up
 	if not genes:
 		genes = allGenes()
 		expression = np.zeros([len(genes), len(cells)])
-
 		for (cidx, cell_row) in enumerate(e.getCellsExpressionCounts(cells)):
 			for gid, expression_val in cell_row:
 				expression[gid, cidx] = expression_val
@@ -309,6 +310,15 @@ def convert_variable(datatype, variable):
 	except ValueError:
 		print("Bad conversion")
 		raise
+
+def get_clusters(list_of_clusters):
+	cluster_filter = "|".join(list_of_clusters)
+	cellset_name = "cluster_set_{}".format(cluster_filter)
+	cluster_filter = "^({})$".format(cluster_filter)
+	e.createCellSetUsingMetaData(cellset_name, application.config["CLUSTER_METADATA_KEY"], cluster_filter, True)
+	cellids = e.getCellSet(cellset_name)
+	e.removeCellSet(cellset_name)
+	return cellids
 
 def getCellName(cellid):
 	e.getCellMetaDataValue(cellid, "CellName")
@@ -671,12 +681,20 @@ class DifferentialExpressionAPI(Resource):
 		# get 2 cell sets
 		cell_list_1 = args.get('celllist1', [])
 		cell_list_2 = args.get('celllist2', [])
+		# cluster_list_1 = args.get('clusters1', [])
+		# cluster_list_2 = args.get('clusters2', [])
 		num_genes = args.get("num_genes")
-		if cell_list_1:
+		if cell_list_1 and cell_list_2:
 			cell_list_1 = [e.cellIdFromString(name) for name in cell_list_1]
-		if cell_list_2:
 			cell_list_2 = [e.cellIdFromString(name) for name in cell_list_2]
+		# elif cluster_list_1 and cluster_list_2:
+		# 	cell_list_1 = get_clusters(cluster_list_1)
+		# 	cell_list_2 = get_clusters(cluster_list_2)
+		else:
+			return make_payload([], "must include either (cellist1 and cellist2) or (clusterlist1 and clusterlist2) parameters", 400)
 		# TODO else get reverse
+		import time
+		t1 = time.time()
 		expression_1 = get_expression(cell_list_1, allGenes())
 		expression_2 = get_expression(cell_list_2, allGenes())
 		expression_1_average = np.mean(expression_1, axis=1)
@@ -698,6 +716,8 @@ class DifferentialExpressionAPI(Resource):
 				"meanexpression": expression_2_average.tolist(),
 			}
 		})
+
+
 
 
 
