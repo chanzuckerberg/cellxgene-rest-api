@@ -31,15 +31,15 @@ class EndPoints(unittest.TestCase):
 		result_json = result.json()
 		assert result_json['status']['error']
 
-	# def test_heatmap(self):
-	# 	url = "{base}{endpoint}".format(base=self.url_base, endpoint="expression")
-	# 	result = self.session.get(url)
-	# 	assert result.status_code == 200
-	# 	result_json = result.json()
-	# 	assert not result_json['status']['error']
-	# 	assert len(result_json['data']['genes'])
-	# 	assert len(result_json["data"]['cells'])
-	# 	assert len(result_json["data"]['cells'][0]['e'])
+	def test_heatmap(self):
+		url = "{base}{endpoint}".format(base=self.url_base, endpoint="expression")
+		result = self.session.get(url)
+		assert result.status_code == 200
+		result_json = result.json()
+		assert not result_json['status']['error']
+		assert len(result_json['data']['genes'])
+		assert len(result_json["data"]['cells'])
+		assert len(result_json["data"]['cells'][0]['e'])
 
 	def test_heatmap_post_celllist(self):
 		url = "{base}{endpoint}".format(base=self.url_base, endpoint="expression")
@@ -58,13 +58,13 @@ class EndPoints(unittest.TestCase):
 
 	def test_heatmap_post_genelist(self):
 		url = "{base}{endpoint}".format(base=self.url_base, endpoint="expression")
-		result = self.session.post(url, data={"genelist": ["ABCD4"]})
+		result = self.session.post(url, data={"genelist": ["ABCD4", "AASS"]})
 		assert result.status_code == 200
 		result_json = result.json()
 		assert 'data' in result_json
-		assert len(result_json['data']['genes']) == 1
+		assert len(result_json['data']['genes']) == 2
 		assert len(result_json["data"]['cells'])
-		assert len(result_json["data"]['cells'][0]['e']) == 1
+		assert len(result_json["data"]['cells'][0]['e']) == 2
 
 	def test_heatmap_post_genelist_celllist(self):
 		url = "{base}{endpoint}".format(base=self.url_base, endpoint="expression")
@@ -103,6 +103,7 @@ class EndPoints(unittest.TestCase):
 		result = self.session.get(url)
 		result_json = result.json()
 		assert result.status_code == 200
+		print(result_json["data"]["graph"])
 		assert result_json["data"]["graph"] is None
 
 	def test_cells_failure(self):

@@ -148,6 +148,11 @@
             "type": "string",
             "variabletype": "categorical",
             "displayname": "Cluster2d Color"
+        },
+  "EM2ClusterID": {
+            "type": "int",
+            "variabletype": "categorical",
+            "displayname": "Cluster2d"
         }
 
 }

@@ -1,6 +1,6 @@
 import sys, os
 from collections import defaultdict
-from re import escape
+import time
 
 from flask import Flask, jsonify, send_from_directory, request, make_response, render_template
 from flask_restful import reqparse
@@ -75,6 +75,9 @@ differential_parser.add_argument('num_genes', type=int, required=False, default=
 						  help="Number of diff-expressed genes to return")
 
 e = ExpressionMatrix(application.config["DATA_DIR"], True)
+# e.createCellGraph(graphName="CellGraph", cellSetName="AllCells", similarPairsName="HighInformationGenes")
+# e.createClusterGraph("CellGraph", "ClusterGraph")
+# e.createMetaDataFromClusterGraph("ClusterGraph", "EM2ClusterID")
 schema = parse_schema(os.path.join(application.config["DATA_DIR"], application.config["SCHEMA_FILE"]))
 
 # ---- Helper Functions -------
@@ -124,21 +127,21 @@ def cast_value(key, value):
 
 
 def parse_exp_data(cells=(), genes=(), limit=0, unexpressed_genes=False):
+	expression = get_expression(cells, genes)
 	if not genes:
 		genes = allGenes()
 	if not cells:
 		cells = allCells()
-	expression = get_expression(cells, genes)
 	if not unexpressed_genes:
 		expression, genes = remove_unexpressed_genes(expression, genes)
 	if limit and len(genes) > limit:
 		genes = genes[:limit]
-		expression = expression[:limit]
+		expression = expression[:,:limit]
 	cell_data = []
 	for idx, cell in enumerate(cells):
 		cell_data.append({
-			"cellname": e.getCellMetaDataValue(cell, "CellName"),
-			"e": list(expression[:, idx]),
+			"cellname": cell,
+			"e": list(expression[idx]),
 		})
 	return {
 		"genes": genes,
@@ -147,24 +150,32 @@ def parse_exp_data(cells=(), genes=(), limit=0, unexpressed_genes=False):
 	}
 
 def remove_unexpressed_genes(expression, genes):
-	genes_expressed = expression.any(axis=1)
+	genes_expressed = expression.any(axis=0)
 	genes = [genes[idx] for idx, val in enumerate(genes_expressed) if val]
-	return expression[genes_expressed], genes
+	return expression[:, genes_expressed], genes
 
 def get_expression(cells, genes = ()):
 	# TODO speed this up
-	if not genes:
-		genes = allGenes()
-		expression = np.zeros([len(genes), len(cells)])
-		for (cidx, cell_row) in enumerate(e.getCellsExpressionCounts(cells)):
-			for gid, expression_val in cell_row:
-				expression[gid, cidx] = expression_val
+	if not cells:
+		cellset = "AllCells"
 	else:
-		expression = np.zeros([len(genes), len(cells)])
-		for (cidx, cell_row) in enumerate(e.getCellsExpressionCountsForGenes(cells, genes)):
-			for gid, expression_val in cell_row:
-				gidx = genes.index(gid)
-				expression[gidx, cidx] = expression_val
+		cellname_filter = "|".join(cells)
+		cellname_filter = "^({})$".format(cellname_filter)
+		cellset = "ExpressionCellSet"
+
+		e.createCellSetUsingMetaData(cellset, "CellName", cellname_filter, True)
+
+	if not genes:
+		expression = e.getDenseExpressionMatrix("AllGenes", cellset)
+
+	else:
+		genesetName = "ExpressionGeneSet_{}".format(time.time())
+		e.createGeneSetFromGeneNames(genesetName, genes)
+		expression = e.getDenseExpressionMatrix(genesetName, cellset)
+
+	if cells:
+		e.removeCellSet(cellset)
+
 	return expression
 
 
@@ -273,10 +284,10 @@ def normalize_verticies(verticies):
 	}
 
 def allGenes():
-	return [i for i in range(e.geneCount())]
+	return [e.geneName(i) for i in range(e.geneCount())]
 
 def allCells():
-	return e.getCellSet('AllCells')
+	return [getCellName(i) for i in e.getCellSet('AllCells')]
 
 def normalize(v):
 	vec = np.array(v)
@@ -288,7 +299,7 @@ def normalize(v):
 def diffexp(expression_1, expression_2, num_genes=20):
 	from scipy import stats
 	# TODO make sure genes aren't nans
-	diff_exp = stats.ttest_ind(expression_1, expression_2, axis=1)
+	diff_exp = stats.ttest_ind(expression_1, expression_2)
 	set1 = np.argsort(diff_exp.statistic)[::-1]
 	set1 = np.roll(set1, -np.count_nonzero(np.isnan(diff_exp.statistic)))[:num_genes]
 	set2 = np.argsort(diff_exp.statistic)[:num_genes]
@@ -318,10 +329,10 @@ def get_clusters(list_of_clusters):
 	e.createCellSetUsingMetaData(cellset_name, application.config["CLUSTER_METADATA_KEY"], cluster_filter, True)
 	cellids = e.getCellSet(cellset_name)
 	e.removeCellSet(cellset_name)
-	return cellids
+	return [getCellName(i) for i in cellids]
 
 def getCellName(cellid):
-	e.getCellMetaDataValue(cellid, "CellName")
+	return e.getCellMetaDataValue(cellid, "CellName")
 
 # ---- Traditional Routes -----
 @application.route('/')
@@ -577,22 +588,22 @@ class ExpressionAPI(Resource):
 	def post(self):
 		args = self.parser.parse_args()
 		cell_list = args.get('celllist', [])
-		if cell_list:
-			cell_list = [e.cellIdFromString(name) for name in cell_list]
-		else:
-			cell_list = []
+		# if cell_list:
+		# 	cell_list = [e.cellIdFromString(name) for name in cell_list]
+		# else:
+		# 	cell_list = []
 		gene_list = args.get('genelist', [])
-		if gene_list:
-			gene_list = [e.geneIdFromName(name) for name in gene_list]
-		else:
-			gene_list = []
+		# if gene_list:
+		# 	gene_list = [e.geneIdFromName(name) for name in gene_list]
+		# else:
+		# 	gene_list = []
 		unexpressed_genes = args.get('include_unexpressed_genes', False)
 		if not (cell_list) and not (gene_list):
 			return make_payload([], "must include celllist and/or genelist parameter", 400)
 		data = parse_exp_data(cell_list, gene_list, unexpressed_genes=unexpressed_genes)
 		if cell_list and len(data['cells']) < len(cell_list):
 			return make_payload([], "Some cell ids not available", 400)
-		if gene_list and len(data['genes']) < len(gene_list):
+		if (gene_list and len(data['genes']) < len(gene_list)) and unexpressed_genes:
 			return make_payload([], "Some genes not available", 400)
 		return make_payload(data)
 
@@ -602,6 +613,7 @@ class ExpressionAPI(Resource):
 # 		run = randint(0, 10000)
 # 		graphname = "cellgraph_{}".format(run)
 # 		e = ExpressionMatrix(application.config['DATA_DIR'], True)
+# 		args = graph_parser.parse_args()
 # 		args = graph_parser.parse_args()
 # 		e.createCellGraph(graphname, args.cellsetname, args.similarpairsname, args.similaritythreshold,
 # 						  args.connectivity)
@@ -681,20 +693,15 @@ class DifferentialExpressionAPI(Resource):
 		# get 2 cell sets
 		cell_list_1 = args.get('celllist1', [])
 		cell_list_2 = args.get('celllist2', [])
-		# cluster_list_1 = args.get('clusters1', [])
-		# cluster_list_2 = args.get('clusters2', [])
+		cluster_list_1 = args.get('clusters1', [])
+		cluster_list_2 = args.get('clusters2', [])
 		num_genes = args.get("num_genes")
-		if cell_list_1 and cell_list_2:
-			cell_list_1 = [e.cellIdFromString(name) for name in cell_list_1]
-			cell_list_2 = [e.cellIdFromString(name) for name in cell_list_2]
-		# elif cluster_list_1 and cluster_list_2:
-		# 	cell_list_1 = get_clusters(cluster_list_1)
-		# 	cell_list_2 = get_clusters(cluster_list_2)
-		else:
+		if cluster_list_1 and cluster_list_2:
+			cell_list_1 = get_clusters(cluster_list_1)
+			cell_list_2 = get_clusters(cluster_list_2)
+		if not (cell_list_1 and cell_list_2):
 			return make_payload([], "must include either (cellist1 and cellist2) or (clusterlist1 and clusterlist2) parameters", 400)
 		# TODO else get reverse
-		import time
-		t1 = time.time()
 		expression_1 = get_expression(cell_list_1, allGenes())
 		expression_2 = get_expression(cell_list_2, allGenes())
 		expression_1_average = np.mean(expression_1, axis=1)
@@ -903,7 +910,7 @@ class CellsAPI(Resource):
 				# reset cellids if create the graph
 				cellidlist = []
 				for i in range(len(normalized_verticies["labels"])):
-					graph.append((e.getCellMetaDataValue(normalized_verticies["labels"][i], 'CellName'), normalized_verticies["x"][i],
+					graph.append((getCellName(i), normalized_verticies["x"][i],
 					 normalized_verticies["y"][i]))
 					cellidlist.append(normalized_verticies["labels"][i])
 			keptcells = parse_metadata(cellidlist)
@@ -916,7 +923,7 @@ class CellsAPI(Resource):
 				e.removeCellSet(output_cellset)
 		if data["cellcount"] <= REACTIVE_LIMIT:
 			if not noexpression:
-				expression = get_expression(cellidlist)
+				expression = get_expression([getCellName(i) for i in cellidlist])
 				expression_average = np.mean(expression, axis=1)
 				data["expression"] = expression_average.tolist()
 			data["reactive"] = True
