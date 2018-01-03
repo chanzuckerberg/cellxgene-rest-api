@@ -1,19 +1,26 @@
-import sys, os
+import sys, os, time
 from collections import defaultdict
-import time
 
 from flask import Flask, jsonify, send_from_directory, request, make_response, render_template
 from flask_restful import reqparse
 from flask_restful_swagger_2 import Api, swagger, Resource
 from flask_cors import CORS
 import numpy as np
+from scipy import stats
 
 from schemaparse import parse_schema
+
+# CONSTANTS
+REACTIVE_LIMIT = 10000
+INVALID_CELL_ID = 4294967295
+
+# Local Errors
+class QueryStringError(Exception):
+	pass
 
 application = Flask(__name__, static_url_path='/templates')
 CORS(application)
 
-REACTIVE_LIMIT = 10000
 # SECRETS
 SECRET_KEY = os.environ.get("SECRET_KEY", default=None)
 if not SECRET_KEY:
@@ -22,6 +29,7 @@ CXG_API_BASE = os.environ.get("CXG_API_BASE", default=None)
 if not CXG_API_BASE:
 	raise ValueError("No api base")
 
+# CONFIG
 application.config.from_pyfile('app.cfg', silent=True)
 application.config.update(
 	CXG_API_BASE=CXG_API_BASE,
@@ -35,16 +43,16 @@ application.config.update(
 	EM2_DIR=os.path.join(dir_path, application.config["EM2_DIR"]),
 )
 
+# SWAGGER
 api = Api(application, api_version='0.1', produces=["application/json"], title="cellxgene rest api",
 		  api_spec_url='/api/swagger',
 		  description='A API connecting ExpressionMatrix2 clustering algorithm to cellxgene')
 
+# Load expression matrix libray only after location path is configured
 sys.path.insert(0, application.config["EM2_DIR"])
 from ExpressionMatrix2 import ExpressionMatrix
 
-INVALIDCELLID = 4294967295
-
-
+# Param parsers
 graph_parser = reqparse.RequestParser()
 graph_parser.add_argument('cellsetname', type=str, default='AllCells', required=False, help="Named cell set")
 graph_parser.add_argument('similarpairsname', type=str, default='ExactHighInformationGenes', required=False,
@@ -63,9 +71,6 @@ expression_parser.add_argument('genelist', type=str, action="append", required=F
 expression_parser.add_argument('include_unexpressed_genes', type=bool, required=False,
 							   help='Include genes with zero expression across cell set')
 
-# cluster_parser = reqparse.RequestParser()
-# cluster_parser.add_argument('clustername', type=str, required=True, help="Name of cell graph")
-
 differential_parser = reqparse.RequestParser()
 differential_parser.add_argument('celllist1', type=str, action="append", required=False, help='First group of cells by id')
 differential_parser.add_argument('celllist2', type=str, action="append", required=False, help='Second group of cells by id')
@@ -75,14 +80,17 @@ differential_parser.add_argument('num_genes', type=int, required=False, default=
 						  help="Number of diff-expressed genes to return")
 
 e = ExpressionMatrix(application.config["DATA_DIR"], True)
-# e.createCellGraph(graphName="CellGraph", cellSetName="AllCells", similarPairsName="HighInformationGenes")
-# e.createClusterGraph("CellGraph", "ClusterGraph")
-# e.createMetaDataFromClusterGraph("ClusterGraph", "EM2ClusterID")
 schema = parse_schema(os.path.join(application.config["DATA_DIR"], application.config["SCHEMA_FILE"]))
 
-# ---- Helper Functions -------
 
+# ---- Helper Functions -------
 def filter(cell, qs):
+	"""
+	Check if cell's metadata are within the filtered parameters
+	:param cell: cell id
+	:param qs: query string
+	:return: Boolean True if cell within filter, False if rejected by filter
+	"""
 	keep = True
 	for key, value in qs.items():
 		if value["variabletype"] == 'categorical':
@@ -101,17 +109,30 @@ def filter(cell, qs):
 				break
 	return keep
 
+
 def parse_metadata(cells=False):
+	"""
+	Get dictionary representation of metadata for a list of cells (or all cells in data set if cells not set)
+	:param cells: list of cells (False for all cells)
+	:return: {metadata_key1: value1, metadata_key2: value1, ...}
+	"""
 	metadata = []
 	if cells == False:
 		cells = e.getCellSet('AllCells')
-	if INVALIDCELLID not in cells:
+	if INVALID_CELL_ID not in cells:
 		mdata = e.getCellsMetaData(cells)
 		for i in mdata:
 			metadata.append({k:cast_value(k,v) for k,v in i})
 	return metadata
 
+
 def cast_value(key, value):
+	"""
+	Cast metadata value to proper type
+	:param key: string key
+	:param value: string metadata value
+	:return:
+	"""
 	val_type = schema[key]["type"]
 	new_val = value
 	try:
@@ -127,11 +148,19 @@ def cast_value(key, value):
 
 
 def parse_exp_data(cells=(), genes=(), limit=0, unexpressed_genes=False):
+	"""
+	Get expression data for set of cells and genes
+	:param cells: list of cell names
+	:param genes: list of gene names
+	:param limit: optional, limit number of genes returned
+	:param unexpressed_genes: boolean, filter out genes with no expression
+	:return: json: genes: list of genes, cells: expression matrix:, nonzero_gene_count: number of expressed genes
+	"""
 	expression = get_expression(cells, genes)
 	if not genes:
-		genes = allGenes()
+		genes = all_genes()
 	if not cells:
-		cells = allCells()
+		cells = all_cells()
 	if not unexpressed_genes:
 		expression, genes = remove_unexpressed_genes(expression, genes)
 	if limit and len(genes) > limit:
@@ -149,12 +178,26 @@ def parse_exp_data(cells=(), genes=(), limit=0, unexpressed_genes=False):
 		"nonzero_gene_count": int(np.sum(expression.any(axis=1)))
 	}
 
+
 def remove_unexpressed_genes(expression, genes):
+	"""
+	Filter out genes that have no expression data from expression matrix
+	:param expression: numpy matrix will expression data
+	:param genes: list of genes names
+	:return: tuple, filtered expression numpy matrix, list of genes
+	"""
 	genes_expressed = expression.any(axis=0)
 	genes = [genes[idx] for idx, val in enumerate(genes_expressed) if val]
 	return expression[:, genes_expressed], genes
 
+
 def get_expression(cells, genes = ()):
+	"""
+	Get matrix of expression data
+	:param cells: list of cell names, or all cells if empty
+	:param genes: list of genes, or all genes if empty
+	:return: numpy expression matrix
+	"""
 	# TODO speed this up
 	if not cells:
 		cellset = "AllCells"
@@ -162,24 +205,27 @@ def get_expression(cells, genes = ()):
 		cellname_filter = "|".join(cells)
 		cellname_filter = "^({})$".format(cellname_filter)
 		cellset = "ExpressionCellSet"
-
 		e.createCellSetUsingMetaData(cellset, "CellName", cellname_filter, True)
 
 	if not genes:
 		expression = e.getDenseExpressionMatrix("AllGenes", cellset)
-
 	else:
 		genesetName = "ExpressionGeneSet_{}".format(time.time())
 		e.createGeneSetFromGeneNames(genesetName, genes)
 		expression = e.getDenseExpressionMatrix(genesetName, cellset)
-
 	if cells:
 		e.removeCellSet(cellset)
-
 	return expression
 
 
 def make_payload(data, errormessage="", errorcode=200):
+	"""
+	Creates JSON respons for requests
+	:param data: json data
+	:param errormessage: error message
+	:param errorcode: http error code
+	:return: flask json repsonse
+	"""
 	error = False
 	if errormessage:
 		error = True
@@ -193,6 +239,11 @@ def make_payload(data, errormessage="", errorcode=200):
 
 
 def parse_querystring(qs):
+	"""
+	Parses filter query and transforms to json
+	:param qs: dictionary query string
+	:return: reformatted query string
+	"""
 	query = {}
 	for key in qs:
 		if key in ["_nograph", "_includeisolated", "_noexpression"]:
@@ -225,6 +276,11 @@ def parse_querystring(qs):
 
 
 def get_metadata_ranges(metadata):
+	"""
+	Parses through all metadata to get available values in current dataset
+	:param metadata: dictionary of metadata
+	:return: dictionary {categorical_key: { "options": [list of options]}, continous_key: {"range": {"min": min_val, "max": max_val}}}
+	"""
 	options = {}
 	for s in schema:
 		options[s] = {}
@@ -266,6 +322,11 @@ def get_metadata_ranges(metadata):
 
 
 def normalize_verticies(verticies):
+	"""
+	normalize x,y verticies for graph
+	:param verticies: list of vertex objects
+	:return: json: {"labels": list of point labels, "x": list of normalized x positions, "y": list of normalized y positions}
+	"""
 	labels = []
 	x = []
 	y = []
@@ -283,35 +344,80 @@ def normalize_verticies(verticies):
 		"y": y
 	}
 
-def allGenes():
-	return [e.geneName(i) for i in range(e.geneCount())]
-
-def allCells():
-	return [getCellName(i) for i in e.getCellSet('AllCells')]
 
 def normalize(v):
+	"""
+	run normalization, zero safe
+	:param v: vector to normalize
+	:return: normalized vector
+	"""
 	vec = np.array(v)
 	norm = np.linalg.norm(vec, ord=np.inf)
 	if norm == 0:
 		return vec
 	return vec / norm
 
+
+def all_genes():
+	"""
+	Get list of all genenames in dataset
+	:return: list of gene names
+	"""
+	return [e.geneName(i) for i in range(e.geneCount())]
+
+
+def all_cells():
+	"""
+	Get list of all cell names in dataset
+	:return: list of cell names
+	"""
+	return [get_cell_name(i) for i in e.getCellSet('AllCells')]
+
+
 def diffexp(expression_1, expression_2, num_genes=20):
-	from scipy import stats
+	"""
+	get top expressed genes from two different cell sets (uses t-test)
+	:param expression_1: numpy expression array cell set 1
+	:param expression_2: numpy expression array cell set 2
+	:param num_genes: number of cells to return
+	:return: Top genes and mean expression for each gene in both cell sets
+	"""
 	# TODO make sure genes aren't nans
 	diff_exp = stats.ttest_ind(expression_1, expression_2)
 	set1 = np.argsort(diff_exp.statistic)[::-1]
 	set1 = np.roll(set1, -np.count_nonzero(np.isnan(diff_exp.statistic)))[:num_genes]
 	set2 = np.argsort(diff_exp.statistic)[:num_genes]
+	mean_ex1_set1 = np.mean(expression_1[:, set1], axis=0)
+	mean_ex2_set1 = np.mean(expression_2[:, set1], axis=0)
+	mean_ex1_set2 = np.mean(expression_1[:, set2], axis=0)
+	mean_ex2_set2 = np.mean(expression_2[:, set2], axis=0)
+
+
 	genes_cellset_1 = [e.geneName(gid) for gid in set1]
 	genes_cellset_2 = [e.geneName(gid) for gid in set2]
-	return genes_cellset_1, genes_cellset_2
+	return {
+		"celllist1": {
+			"topgenes": genes_cellset_1,
+			"mean_expression_cellset1": mean_ex1_set1.tolist(),
+			"mean_expression_cellset2": mean_ex2_set1.tolist(),
+		},
+		"celllist2": {
+			"topgenes": genes_cellset_2,
+			"mean_expression_cellset1": mean_ex1_set2.tolist(),
+			"mean_expression_cellset2":mean_ex2_set2.tolist(),
+		},
+	}
 
-class QueryStringError(Exception):
-	pass
 
-
+# TODO do i need this one?
 def convert_variable(datatype, variable):
+	"""
+	Convert variable to number (float/int)
+	:param datatype: type to convert to
+	:param variable: value of variable
+	:return: converted variable
+	:raises: ValueError
+	"""
 	try:
 		if variable and datatype == "int":
 			variable = int(variable)
@@ -322,19 +428,33 @@ def convert_variable(datatype, variable):
 		print("Bad conversion")
 		raise
 
+
 def get_clusters(list_of_clusters):
+	"""
+	Get list of cells that are members of the cluster(s)
+	:param list_of_clusters: list of strings cluster names
+	:return: list of cell names
+	"""
 	cluster_filter = "|".join(list_of_clusters)
 	cellset_name = "cluster_set_{}".format(cluster_filter)
 	cluster_filter = "^({})$".format(cluster_filter)
 	e.createCellSetUsingMetaData(cellset_name, application.config["CLUSTER_METADATA_KEY"], cluster_filter, True)
 	cellids = e.getCellSet(cellset_name)
 	e.removeCellSet(cellset_name)
-	return [getCellName(i) for i in cellids]
+	return [get_cell_name(i) for i in cellids]
 
-def getCellName(cellid):
+
+def get_cell_name(cellid):
+	"""
+	Get cell name from cell id
+	:param cellid: int cell id
+	:return: string name of cell
+	"""
 	return e.getCellMetaDataValue(cellid, "CellName")
 
+
 # ---- Traditional Routes -----
+# CellxGene application
 @application.route('/')
 def index():
 	url_base = application.config["CXG_API_BASE"]
@@ -344,9 +464,11 @@ def index():
 	return render_template("index.html", prefix=prefix, version=version)
 
 
+# renders swagger documentation
 @application.route('/swagger')
 def swag():
 	return render_template("swagger.html")
+
 
 @application.route('/favicon.png')
 def icon():
@@ -588,15 +710,7 @@ class ExpressionAPI(Resource):
 	def post(self):
 		args = self.parser.parse_args()
 		cell_list = args.get('celllist', [])
-		# if cell_list:
-		# 	cell_list = [e.cellIdFromString(name) for name in cell_list]
-		# else:
-		# 	cell_list = []
 		gene_list = args.get('genelist', [])
-		# if gene_list:
-		# 	gene_list = [e.geneIdFromName(name) for name in gene_list]
-		# else:
-		# 	gene_list = []
 		unexpressed_genes = args.get('include_unexpressed_genes', False)
 		if not (cell_list) and not (gene_list):
 			return make_payload([], "must include celllist and/or genelist parameter", 400)
@@ -644,20 +758,7 @@ class DifferentialExpressionAPI(Resource):
 				'name': 'body',
 				'in': 'body',
 				'schema': {
-					"example": {
-						"celllist1": [
-							"1001000010.C8",
-							"1001000010.D5",
-							"1001000010.D9",
-
-						],
-						"celllist2": [
-							"1001000012.H4",
-							"1001000012.H5",
-							"1001000012.H6",
-						],
-						"num_genes": 5
-					}
+					"example": {"clusters1": ["6"], "clusters2": ["3"]}
 				}
 			}
 		],
@@ -666,16 +767,52 @@ class DifferentialExpressionAPI(Resource):
 				'description': 'top expressed genes for cellset1, cellset2',
 				'examples': {
 					'application/json': {
-						"data": {
+						"data":  {
 							"celllist1": {
-								"topgenes": [],
-								"expression": [],
-								"meanexpression": [],
+								"mean_expression_cellset1": [
+									3339.285714285714,
+									4806.642857142857,
+									241.07142857142858,
+									619.0714285714286,
+									203.42857142857142
+								],
+								"mean_expression_cellset2": [
+									93.55555555555556,
+									1667.3333333333333,
+									68.22222222222223,
+									2.2222222222222223,
+									0
+								],
+								"topgenes": [
+									"SAT1",
+									"FTL",
+									"RPS16",
+									"SRGN",
+									"CTSS"
+								]
 							},
 							"celllist2": {
-								"topgenes": [],
-								"expression": [],
-								"meanexpression": [],
+								"mean_expression_cellset1": [
+									95.78571428571429,
+									47.642857142857146,
+									54.357142857142854,
+									47.142857142857146,
+									500.35714285714283
+								],
+								"mean_expression_cellset2": [
+									1523.5555555555557,
+									203.44444444444446,
+									752.8888888888889,
+									240.22222222222223,
+									3110.222222222222
+								],
+								"topgenes": [
+									"CLU",
+									"COX7C",
+									"CKB",
+									"LOC550643",
+									"TUBA1A"
+								]
 							}
 						},
 						"status": {
@@ -699,33 +836,19 @@ class DifferentialExpressionAPI(Resource):
 		if cluster_list_1 and cluster_list_2:
 			cell_list_1 = get_clusters(cluster_list_1)
 			cell_list_2 = get_clusters(cluster_list_2)
-		if not (cell_list_1 and cell_list_2):
-			return make_payload([], "must include either (cellist1 and cellist2) or (clusterlist1 and clusterlist2) parameters", 400)
+		if not ((cell_list_1 and cell_list_2)):
+			return make_payload([], "must include either (cellist1 and cellist2) or (clusters1 and clusters2) parameters", 400)
 		# TODO else get reverse
-		expression_1 = get_expression(cell_list_1, allGenes())
-		expression_2 = get_expression(cell_list_2, allGenes())
-		expression_1_average = np.mean(expression_1, axis=1)
-		expression_2_average = np.mean(expression_2, axis=1)
+		expression_1 = get_expression(cell_list_1, all_genes())
+		expression_2 = get_expression(cell_list_2, all_genes())
+		# expression_1_average = np.mean(expression_1, axis=1)
+		# expression_2_average = np.mean(expression_2, axis=1)
 		# t-test between cell sets
 		# TODO make sure genes aren't nans
-		genes_cellset_1, genes_cellset_2 = diffexp(expression_1, expression_2, num_genes)
+		data = diffexp(expression_1, expression_2, num_genes)
 		# TODO also return statistic value
 		# return top expressed genes
-		return make_payload({
-			"celllist1": {
-				"topgenes": genes_cellset_1,
-				"expression": expression_1.tolist(),
-				"meanexpression": expression_1_average.tolist(),
-			},
-			"celllist2": {
-				"topgenes": genes_cellset_2,
-				"expression": expression_1.tolist(),
-				"meanexpression": expression_2_average.tolist(),
-			}
-		})
-
-
-
+		return make_payload(data)
 
 
 class CellsAPI(Resource):
@@ -910,8 +1033,8 @@ class CellsAPI(Resource):
 				# reset cellids if create the graph
 				cellidlist = []
 				for i in range(len(normalized_verticies["labels"])):
-					graph.append((getCellName(i), normalized_verticies["x"][i],
-					 normalized_verticies["y"][i]))
+					graph.append((get_cell_name(i), normalized_verticies["x"][i],
+								  normalized_verticies["y"][i]))
 					cellidlist.append(normalized_verticies["labels"][i])
 			keptcells = parse_metadata(cellidlist)
 			ranges = get_metadata_ranges(keptcells)
@@ -923,7 +1046,7 @@ class CellsAPI(Resource):
 				e.removeCellSet(output_cellset)
 		if data["cellcount"] <= REACTIVE_LIMIT:
 			if not noexpression:
-				expression = get_expression([getCellName(i) for i in cellidlist])
+				expression = get_expression([get_cell_name(i) for i in cellidlist])
 				expression_average = np.mean(expression, axis=1)
 				data["expression"] = expression_average.tolist()
 			data["reactive"] = True
@@ -931,7 +1054,6 @@ class CellsAPI(Resource):
 			data["cellids"] = [m["CellName"] for m in keptcells]
 			data["graph"] = graph
 		return make_payload(data)
-
 
 
 class InitializeAPI(Resource):
@@ -1024,7 +1146,6 @@ api.add_resource(ExpressionAPI, "/api/v0.1/expression")
 api.add_resource(InitializeAPI, "/api/v0.1/initialize")
 api.add_resource(CellsAPI, "/api/v0.1/cells")
 api.add_resource(DifferentialExpressionAPI, "/api/v0.1/diffexpression")
-# api.add_resource(ClusterAPI, "/api/v0.1/cluster")
 
 if __name__ == "__main__":
 	application.run(host='0.0.0.0', debug=True)

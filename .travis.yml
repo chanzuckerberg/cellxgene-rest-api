@@ -17,6 +17,7 @@ install:
 script:
 - bin/build-docker $TRAVIS_BRANCH ${TRAVIS_COMMIT::8} $TRAVIS_BUILD_NUMBER
 - docker run -p 5000:5000 -e SECRET_KEY=secret -e CXG_API_BASE="http://0.0.0.0:5001/api/v0.1/cells" chanzuckerberg/cellxgene-rest-api:ci &
+- sleep 15
 - for i in {1..90}; do if nc -z localhost 5000; then break; else echo "Waiting for server..."; sleep 1; fi; done
 - nosetests tests/test_api.py
 after_success:
