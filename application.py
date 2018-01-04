@@ -215,6 +215,8 @@ def get_expression(cells, genes = ()):
 		expression = e.getDenseExpressionMatrix(genesetName, cellset)
 	if cells:
 		e.removeCellSet(cellset)
+	if genes:
+		e.removeGeneSet(genesetName)
 	return expression
 
 
