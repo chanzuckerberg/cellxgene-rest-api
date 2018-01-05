@@ -30,14 +30,13 @@ if not CXG_API_BASE:
 	raise ValueError("No api base")
 
 # CONFIG
-application.config.from_pyfile('app.cfg', silent=True)
+application.config.from_pyfile('app-human-mtg.cfg', silent=True)
 application.config.update(
 	CXG_API_BASE=CXG_API_BASE,
 	SECRET_KEY=SECRET_KEY
 )
 dir_path = os.path.dirname(os.path.realpath(__file__))
 application.config.update(
-	GBM_DIR=os.path.join(dir_path, application.config["GBM_DIR"]),
 	SCRATCH_DIR=os.path.join(dir_path, application.config["SCRATCH_DIR"]),
 	DATA_DIR=os.path.join(dir_path, application.config["DATA_DIR"]),
 	EM2_DIR=os.path.join(dir_path, application.config["EM2_DIR"]),
@@ -46,7 +45,7 @@ application.config.update(
 # SWAGGER
 api = Api(application, api_version='0.1', produces=["application/json"], title="cellxgene rest api",
 		  api_spec_url='/api/swagger',
-		  description='A API connecting ExpressionMatrix2 clustering algorithm to cellxgene')
+		  description='An API connecting ExpressionMatrix2 clustering algorithm to cellxgene')
 
 # Load expression matrix libray only after location path is configured
 sys.path.insert(0, application.config["EM2_DIR"])
@@ -55,7 +54,7 @@ from ExpressionMatrix2 import ExpressionMatrix
 # Param parsers
 graph_parser = reqparse.RequestParser()
 graph_parser.add_argument('cellsetname', type=str, default='AllCells', required=False, help="Named cell set")
-graph_parser.add_argument('similarpairsname', type=str, default='ExactHighInformationGenes', required=False,
+graph_parser.add_argument('similarpairsname', type=str, default='LshHighInfo', required=False,
 						  help="Named setof pairs")
 graph_parser.add_argument('similaritythreshold', type=float, required=False, default=0.3, help="Threshold between 0-1")
 graph_parser.add_argument('connectivity', type=int, required=False, default=20,
@@ -202,11 +201,9 @@ def get_expression(cells, genes = ()):
 	if not cells:
 		cellset = "AllCells"
 	else:
-		cellname_filter = "|".join(cells)
-		cellname_filter = "^({})$".format(cellname_filter)
+		cell_ids = [get_cell_id(name) for name in cells]
 		cellset = "ExpressionCellSet"
-		e.createCellSetUsingMetaData(cellset, "CellName", cellname_filter, True)
-
+		e.createCellSet(cellset, cell_ids)
 	if not genes:
 		expression = e.getDenseExpressionMatrix("AllGenes", cellset)
 	else:
@@ -454,6 +451,14 @@ def get_cell_name(cellid):
 	"""
 	return e.getCellMetaDataValue(cellid, "CellName")
 
+def get_cell_id(cellname):
+	"""
+	Get cell id from cell name
+	:param cellname: string cell name
+	:return: int id of cell
+	"""
+	return e.cellIdFromString(cellname)
+
 
 # ---- Traditional Routes -----
 # CellxGene application
@@ -652,6 +657,7 @@ class ExpressionAPI(Resource):
 	def get(self):
 		# TODO add choice for limit (pagination?)
 		args = self.parser.parse_args()
+		#print("get expression args", args)
 		unexpressed_genes = args.get('include_unexpressed_genes', False)
 		data = parse_exp_data(limit=40, unexpressed_genes=unexpressed_genes)
 		return make_payload(data)
@@ -711,6 +717,7 @@ class ExpressionAPI(Resource):
 	})
 	def post(self):
 		args = self.parser.parse_args()
+		#print("post expression args", args)
 		cell_list = args.get('celllist', [])
 		gene_list = args.get('genelist', [])
 		unexpressed_genes = args.get('include_unexpressed_genes', False)
@@ -955,6 +962,7 @@ class CellsAPI(Resource):
 	})
 	def get(self):
 		# TODO Allow random downsampling
+		t0 = time.time()
 		e = ExpressionMatrix(application.config["DATA_DIR"], True)
 		data = {
 			"reactive": False,
@@ -968,6 +976,7 @@ class CellsAPI(Resource):
 		}
 		try:
 			args = request.args
+			#print("get cell args", args)
 			nograph = False
 			includeisolated = False
 			noexpression = False
@@ -1023,11 +1032,13 @@ class CellsAPI(Resource):
 		else:
 			output_cellset = "AllCells"
 			cellidlist = e.getCellSet(output_cellset)
+			print(time.time() - t0)
 		try:
 			graph = None
 			if not nograph and len(cellidlist) <= REACTIVE_LIMIT:
+				print("Graphing")
 				graphname = "cellgraph"
-				e.createCellGraph(graphname, output_cellset, 'HighInformationGenes', keepIsolatedVertices=includeisolated)
+				e.createCellGraph(graphname, output_cellset, 'LshHighInfo', keepIsolatedVertices=includeisolated)
 				e.computeCellGraphLayout(graphname)
 				vertices = e.getCellGraphVertices(graphname)
 				normalized_verticies = normalize_verticies(vertices)
@@ -1038,8 +1049,15 @@ class CellsAPI(Resource):
 					graph.append((get_cell_name(i), normalized_verticies["x"][i],
 								  normalized_verticies["y"][i]))
 					cellidlist.append(normalized_verticies["labels"][i])
+			print(time.time() - t0)
+			print("B")
+
 			keptcells = parse_metadata(cellidlist)
+			print(time.time() - t0)
+			print("C")
 			ranges = get_metadata_ranges(keptcells)
+			print(time.time() - t0)
+			print("D")
 			data["ranges"] = ranges
 			data["cellcount"] = len(keptcells)
 
@@ -1048,9 +1066,16 @@ class CellsAPI(Resource):
 				e.removeCellSet(output_cellset)
 		if data["cellcount"] <= REACTIVE_LIMIT:
 			if not noexpression:
-				expression = get_expression([get_cell_name(i) for i in cellidlist])
+				if output_cellset == "AllCells":
+					get_expression(cells=())
+				else:
+					expression = get_expression([get_cell_name(i) for i in cellidlist])
+				print(time.time() - t0)
+				print("E")
 				expression_average = np.mean(expression, axis=1)
 				data["expression"] = expression_average.tolist()
+			print(time.time() - t0)
+			print("F")
 			data["reactive"] = True
 			data["metadata"] = keptcells
 			data["cellids"] = [m["CellName"] for m in keptcells]
