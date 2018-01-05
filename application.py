@@ -1140,7 +1140,12 @@ class InitializeAPI(Resource):
 	def get(self):
 		metadata = parse_metadata()
 		options = get_metadata_ranges(metadata)
-		return make_payload({"schema": schema, "options": options, "cellcount": len(metadata)})
+		return make_payload({
+			"schema": schema,
+			"ranges": options,
+			"cellcount": len(metadata),
+			"reactivelimit": REACTIVE_LIMIT,
+		})
 
 
 api.add_resource(MetadataAPI, "/api/v0.1/metadata")
