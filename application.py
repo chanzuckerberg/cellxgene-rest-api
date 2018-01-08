@@ -1,5 +1,6 @@
 import sys, os, time
 from collections import defaultdict
+# import atexit
 
 from flask import Flask, jsonify, send_from_directory, request, make_response, render_template
 from flask_restful import reqparse
@@ -11,7 +12,7 @@ from scipy import stats
 from schemaparse import parse_schema
 
 # CONSTANTS
-REACTIVE_LIMIT = 10000
+REACTIVE_LIMIT = 100000
 INVALID_CELL_ID = 4294967295
 
 # Local Errors
@@ -81,6 +82,9 @@ differential_parser.add_argument('num_genes', type=int, required=False, default=
 e = ExpressionMatrix(application.config["DATA_DIR"], True)
 schema = parse_schema(os.path.join(application.config["DATA_DIR"], application.config["SCHEMA_FILE"]))
 
+# @atexit.register
+# def goodbye():
+# 	print("You are now leaving the Python sector.")
 
 # ---- Helper Functions -------
 def filter(cell, qs):
@@ -205,7 +209,7 @@ def get_expression(cells, genes = ()):
 		cellset = "ExpressionCellSet"
 		e.createCellSet(cellset, cell_ids)
 	if not genes:
-		expression = e.getDenseExpressionMatrix("AllGenes", cellset)
+		e.getDenseExpressionMatrix("AllGenes", cellset)
 	else:
 		genesetName = "ExpressionGeneSet_{}".format(time.time())
 		e.createGeneSetFromGeneNames(genesetName, genes)
@@ -282,37 +286,41 @@ def get_metadata_ranges(metadata):
 	"""
 	options = {}
 	for s in schema:
-		options[s] = {}
-		if schema[s]["variabletype"] == "categorical":
-			# Default dict
-			options[s]["options"] = defaultdict(int)
-		else:
-			options[s]["range"] = {
-				"min": None,
-				"max": None
-			}
+		if schema[s]["include"]:
+			options[s] = {}
+			if schema[s]["variabletype"] == "categorical":
+				# Default dict
+				options[s]["options"] = defaultdict(int)
+			else:
+				options[s]["range"] = {
+					"min": None,
+					"max": None
+				}
 
 	for cell in metadata:
 		for s in schema:
-			try:
-				datum = cell[s]
-				if schema[s]["type"] == "int":
-					datum = int(datum)
-				elif schema[s]["type"] == "float":
-					datum = float(datum)
-				if schema[s]["variabletype"] == "categorical":
-					options[s]["options"][datum] += 1
-				elif schema[s]["variabletype"] == "continuous":
-					if not options[s]["range"]["min"] or datum < options[s]["range"]["min"]:
-						options[s]["range"]["min"] = datum
-					if not options[s]["range"]["max"] or datum > options[s]["range"]["max"]:
-						options[s]["range"]["max"] = datum
-			except KeyError as e:
-				pass
-			except ValueError:
-				pass
-			except TypeError:
-				pass
+			if schema[s]["include"]:
+				try:
+					datum = cell[s]
+					if schema[s]["type"] == "int":
+						datum = int(datum)
+					elif schema[s]["type"] == "float":
+						datum = float(datum)
+					if schema[s]["variabletype"] == "categorical":
+						if (s == "EM2Cluster") and datum.startswith("Unclustered"):
+							continue
+						options[s]["options"][datum] += 1
+					elif schema[s]["variabletype"] == "continuous":
+						if not options[s]["range"]["min"] or datum < options[s]["range"]["min"]:
+							options[s]["range"]["min"] = datum
+						if not options[s]["range"]["max"] or datum > options[s]["range"]["max"]:
+							options[s]["range"]["max"] = datum
+				except KeyError as e:
+					pass
+				except ValueError:
+					pass
+				except TypeError:
+					pass
 	for key, value in dict(options).items():
 		if ("options" in value and not value["options"]) or ("range" in value and not value["range"]["max"]):
 			del options[key]
@@ -962,7 +970,6 @@ class CellsAPI(Resource):
 	})
 	def get(self):
 		# TODO Allow random downsampling
-		t0 = time.time()
 		e = ExpressionMatrix(application.config["DATA_DIR"], True)
 		data = {
 			"reactive": False,
@@ -979,11 +986,9 @@ class CellsAPI(Resource):
 			#print("get cell args", args)
 			nograph = False
 			includeisolated = False
-			noexpression = False
 			if "_nograph" in args:
 				nograph = bool(args["_nograph"])
-			if "_noexpression" in args:
-				noexpression = bool(args["_noexpression"])
+
 			if "_includeisolated" in args:
 				includeisolated = bool(args["_includeisolated"])
 			qs = parse_querystring(request.args)
@@ -1032,11 +1037,9 @@ class CellsAPI(Resource):
 		else:
 			output_cellset = "AllCells"
 			cellidlist = e.getCellSet(output_cellset)
-			print(time.time() - t0)
 		try:
 			graph = None
 			if not nograph and len(cellidlist) <= REACTIVE_LIMIT:
-				print("Graphing")
 				graphname = "cellgraph"
 				e.createCellGraph(graphname, output_cellset, 'LshHighInfo', keepIsolatedVertices=includeisolated)
 				e.computeCellGraphLayout(graphname)
@@ -1049,33 +1052,15 @@ class CellsAPI(Resource):
 					graph.append((get_cell_name(i), normalized_verticies["x"][i],
 								  normalized_verticies["y"][i]))
 					cellidlist.append(normalized_verticies["labels"][i])
-			print(time.time() - t0)
-			print("B")
 
 			keptcells = parse_metadata(cellidlist)
-			print(time.time() - t0)
-			print("C")
 			ranges = get_metadata_ranges(keptcells)
-			print(time.time() - t0)
-			print("D")
 			data["ranges"] = ranges
 			data["cellcount"] = len(keptcells)
 
 		finally:
 			if output_cellset != "AllCells":
 				e.removeCellSet(output_cellset)
-		if data["cellcount"] <= REACTIVE_LIMIT:
-			if not noexpression:
-				if output_cellset == "AllCells":
-					get_expression(cells=())
-				else:
-					expression = get_expression([get_cell_name(i) for i in cellidlist])
-				print(time.time() - t0)
-				print("E")
-				expression_average = np.mean(expression, axis=1)
-				data["expression"] = expression_average.tolist()
-			print(time.time() - t0)
-			print("F")
 			data["reactive"] = True
 			data["metadata"] = keptcells
 			data["cellids"] = [m["CellName"] for m in keptcells]
