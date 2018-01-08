@@ -11,7 +11,7 @@ from scipy import stats
 from schemaparse import parse_schema
 
 # CONSTANTS
-REACTIVE_LIMIT = 10000
+REACTIVE_LIMIT = 100000
 INVALID_CELL_ID = 4294967295
 
 # Local Errors
@@ -37,7 +37,6 @@ application.config.update(
 )
 dir_path = os.path.dirname(os.path.realpath(__file__))
 application.config.update(
-	GBM_DIR=os.path.join(dir_path, application.config["GBM_DIR"]),
 	SCRATCH_DIR=os.path.join(dir_path, application.config["SCRATCH_DIR"]),
 	DATA_DIR=os.path.join(dir_path, application.config["DATA_DIR"]),
 	EM2_DIR=os.path.join(dir_path, application.config["EM2_DIR"]),
@@ -46,7 +45,7 @@ application.config.update(
 # SWAGGER
 api = Api(application, api_version='0.1', produces=["application/json"], title="cellxgene rest api",
 		  api_spec_url='/api/swagger',
-		  description='A API connecting ExpressionMatrix2 clustering algorithm to cellxgene')
+		  description='An API connecting ExpressionMatrix2 clustering algorithm to cellxgene')
 
 # Load expression matrix libray only after location path is configured
 sys.path.insert(0, application.config["EM2_DIR"])
@@ -55,7 +54,7 @@ from ExpressionMatrix2 import ExpressionMatrix
 # Param parsers
 graph_parser = reqparse.RequestParser()
 graph_parser.add_argument('cellsetname', type=str, default='AllCells', required=False, help="Named cell set")
-graph_parser.add_argument('similarpairsname', type=str, default='ExactHighInformationGenes', required=False,
+graph_parser.add_argument('similarpairsname', type=str, default='LshHighInfo', required=False,
 						  help="Named setof pairs")
 graph_parser.add_argument('similaritythreshold', type=float, required=False, default=0.3, help="Threshold between 0-1")
 graph_parser.add_argument('connectivity', type=int, required=False, default=20,
@@ -81,7 +80,6 @@ differential_parser.add_argument('num_genes', type=int, required=False, default=
 
 e = ExpressionMatrix(application.config["DATA_DIR"], True)
 schema = parse_schema(os.path.join(application.config["DATA_DIR"], application.config["SCHEMA_FILE"]))
-
 
 # ---- Helper Functions -------
 def filter(cell, qs):
@@ -140,6 +138,8 @@ def cast_value(key, value):
 			new_val = int(value)
 		elif val_type == "float":
 			new_val = float(value)
+		elif (key == "EM2Cluster") and value.startswith("Unclustered"):
+			new_val = "NoCluster"
 	except ValueError:
 		pass
 	if value == "":
@@ -198,15 +198,12 @@ def get_expression(cells, genes = ()):
 	:param genes: list of genes, or all genes if empty
 	:return: numpy expression matrix
 	"""
-	# TODO speed this up
 	if not cells:
 		cellset = "AllCells"
 	else:
-		cellname_filter = "|".join(cells)
-		cellname_filter = "^({})$".format(cellname_filter)
+		cell_ids = [get_cell_id(name) for name in cells]
 		cellset = "ExpressionCellSet"
-		e.createCellSetUsingMetaData(cellset, "CellName", cellname_filter, True)
-
+		e.createCellSet(cellset, cell_ids)
 	if not genes:
 		expression = e.getDenseExpressionMatrix("AllGenes", cellset)
 	else:
@@ -285,37 +282,41 @@ def get_metadata_ranges(metadata):
 	"""
 	options = {}
 	for s in schema:
-		options[s] = {}
-		if schema[s]["variabletype"] == "categorical":
-			# Default dict
-			options[s]["options"] = defaultdict(int)
-		else:
-			options[s]["range"] = {
-				"min": None,
-				"max": None
-			}
+		if schema[s]["include"]:
+			options[s] = {}
+			if schema[s]["variabletype"] == "categorical":
+				# Default dict
+				options[s]["options"] = defaultdict(int)
+			else:
+				options[s]["range"] = {
+					"min": None,
+					"max": None
+				}
 
 	for cell in metadata:
 		for s in schema:
-			try:
-				datum = cell[s]
-				if schema[s]["type"] == "int":
-					datum = int(datum)
-				elif schema[s]["type"] == "float":
-					datum = float(datum)
-				if schema[s]["variabletype"] == "categorical":
-					options[s]["options"][datum] += 1
-				elif schema[s]["variabletype"] == "continuous":
-					if not options[s]["range"]["min"] or datum < options[s]["range"]["min"]:
-						options[s]["range"]["min"] = datum
-					if not options[s]["range"]["max"] or datum > options[s]["range"]["max"]:
-						options[s]["range"]["max"] = datum
-			except KeyError as e:
-				pass
-			except ValueError:
-				pass
-			except TypeError:
-				pass
+			if schema[s]["include"]:
+				try:
+					datum = cell[s]
+					if schema[s]["type"] == "int":
+						datum = int(datum)
+					elif schema[s]["type"] == "float":
+						datum = float(datum)
+					if schema[s]["variabletype"] == "categorical":
+						if (s == "EM2Cluster") and datum.startswith("Unclustered"):
+							datum = "NoCluster"
+						options[s]["options"][datum] += 1
+					elif schema[s]["variabletype"] == "continuous":
+						if not options[s]["range"]["min"] or datum < options[s]["range"]["min"]:
+							options[s]["range"]["min"] = datum
+						if not options[s]["range"]["max"] or datum > options[s]["range"]["max"]:
+							options[s]["range"]["max"] = datum
+				except KeyError as e:
+					pass
+				except ValueError:
+					pass
+				except TypeError:
+					pass
 	for key, value in dict(options).items():
 		if ("options" in value and not value["options"]) or ("range" in value and not value["range"]["max"]):
 			del options[key]
@@ -393,8 +394,6 @@ def diffexp(expression_1, expression_2, num_genes=20):
 	mean_ex2_set1 = np.mean(expression_2[:, set1], axis=0)
 	mean_ex1_set2 = np.mean(expression_1[:, set2], axis=0)
 	mean_ex2_set2 = np.mean(expression_2[:, set2], axis=0)
-
-
 	genes_cellset_1 = [e.geneName(gid) for gid in set1]
 	genes_cellset_2 = [e.geneName(gid) for gid in set2]
 	return {
@@ -455,14 +454,24 @@ def get_cell_name(cellid):
 	return e.getCellMetaDataValue(cellid, "CellName")
 
 
+def get_cell_id(cellname):
+	"""
+	Get cell id from cell name
+	:param cellname: string cell name
+	:return: int id of cell
+	"""
+	return e.cellIdFromString(cellname)
+
+
 # ---- Traditional Routes -----
 # CellxGene application
 @application.route('/')
 def index():
 	url_base = application.config["CXG_API_BASE"]
 	split_base = url_base.split("/")
-	prefix = '/'.join(split_base[:-2]) + "/"
-	version = "{}/".format(split_base[-2])
+	prefix = '/'.join(split_base[:-1]) + "/"
+	version = "{}/".format(split_base[-1])
+	print(prefix, version)
 	return render_template("index.html", prefix=prefix, version=version)
 
 
@@ -852,6 +861,101 @@ class DifferentialExpressionAPI(Resource):
 		# return top expressed genes
 		return make_payload(data)
 
+	@swagger.doc({
+		'summary': 'Get the top expressed genes for two cell sets. Calculated using t-test',
+		'tags': ['expression'],
+		'parameters': [
+			{
+				'name': 'body',
+				'in': 'body',
+				'schema': {
+					"example": {"clusters1": ["6"], "clusters2": ["3"]}
+				}
+			}
+		],
+		"responses": {
+			'200': {
+				'description': 'top expressed genes for cellset1, cellset2',
+				'examples': {
+					'application/json': {
+						"data": {
+							"celllist1": {
+								"mean_expression_cellset1": [
+									3339.285714285714,
+									4806.642857142857,
+									241.07142857142858,
+									619.0714285714286,
+									203.42857142857142
+								],
+								"mean_expression_cellset2": [
+									93.55555555555556,
+									1667.3333333333333,
+									68.22222222222223,
+									2.2222222222222223,
+									0
+								],
+								"topgenes": [
+									"SAT1",
+									"FTL",
+									"RPS16",
+									"SRGN",
+									"CTSS"
+								]
+							},
+							"celllist2": {
+								"mean_expression_cellset1": [
+									95.78571428571429,
+									47.642857142857146,
+									54.357142857142854,
+									47.142857142857146,
+									500.35714285714283
+								],
+								"mean_expression_cellset2": [
+									1523.5555555555557,
+									203.44444444444446,
+									752.8888888888889,
+									240.22222222222223,
+									3110.222222222222
+								],
+								"topgenes": [
+									"CLU",
+									"COX7C",
+									"CKB",
+									"LOC550643",
+									"TUBA1A"
+								]
+							}
+						},
+						"status": {
+							"error": False,
+							"errormessage": "",
+						}
+					}
+				}
+			},
+		}
+	})
+	def options(self):
+		args = self.parser.parse_args()
+		# TODO allow different calculation methods
+		cell_list_1 = args.get('celllist1', [])
+		cell_list_2 = args.get('celllist2', [])
+		cluster_list_1 = args.get('clusters1', [])
+		cluster_list_2 = args.get('clusters2', [])
+		num_genes = args.get("num_genes")
+		if cluster_list_1 and cluster_list_2:
+			cell_list_1 = get_clusters(cluster_list_1)
+			cell_list_2 = get_clusters(cluster_list_2)
+		if not ((cell_list_1 and cell_list_2)):
+			return make_payload([],
+								"must include either (cellist1 and cellist2) or (clusters1 and clusters2) parameters",
+								400)
+		expression_1 = get_expression(cell_list_1, all_genes())
+		expression_2 = get_expression(cell_list_2, all_genes())
+		# TODO make sure genes aren't nans
+		data = diffexp(expression_1, expression_2, num_genes)
+		return make_payload(data)
+
 
 class CellsAPI(Resource):
 	@swagger.doc({
@@ -968,13 +1072,12 @@ class CellsAPI(Resource):
 		}
 		try:
 			args = request.args
+			#print("get cell args", args)
 			nograph = False
 			includeisolated = False
-			noexpression = False
 			if "_nograph" in args:
 				nograph = bool(args["_nograph"])
-			if "_noexpression" in args:
-				noexpression = bool(args["_noexpression"])
+
 			if "_includeisolated" in args:
 				includeisolated = bool(args["_includeisolated"])
 			qs = parse_querystring(request.args)
@@ -1027,7 +1130,7 @@ class CellsAPI(Resource):
 			graph = None
 			if not nograph and len(cellidlist) <= REACTIVE_LIMIT:
 				graphname = "cellgraph"
-				e.createCellGraph(graphname, output_cellset, 'HighInformationGenes', keepIsolatedVertices=includeisolated)
+				e.createCellGraph(graphname, output_cellset, application.config["HIGH_INFO_NAME"], keepIsolatedVertices=includeisolated)
 				e.computeCellGraphLayout(graphname)
 				vertices = e.getCellGraphVertices(graphname)
 				normalized_verticies = normalize_verticies(vertices)
@@ -1035,9 +1138,10 @@ class CellsAPI(Resource):
 				# reset cellids if create the graph
 				cellidlist = []
 				for i in range(len(normalized_verticies["labels"])):
-					graph.append((get_cell_name(i), normalized_verticies["x"][i],
+					graph.append((get_cell_name(normalized_verticies["labels"][i]), normalized_verticies["x"][i],
 								  normalized_verticies["y"][i]))
 					cellidlist.append(normalized_verticies["labels"][i])
+
 			keptcells = parse_metadata(cellidlist)
 			ranges = get_metadata_ranges(keptcells)
 			data["ranges"] = ranges
@@ -1046,11 +1150,205 @@ class CellsAPI(Resource):
 		finally:
 			if output_cellset != "AllCells":
 				e.removeCellSet(output_cellset)
-		if data["cellcount"] <= REACTIVE_LIMIT:
-			if not noexpression:
-				expression = get_expression([get_cell_name(i) for i in cellidlist])
-				expression_average = np.mean(expression, axis=1)
-				data["expression"] = expression_average.tolist()
+			data["reactive"] = True
+			data["metadata"] = keptcells
+			data["cellids"] = [m["CellName"] for m in keptcells]
+			data["graph"] = graph
+		return make_payload(data)
+
+	@swagger.doc({
+		'summary': 'filter based on metadata fields to get a subset cells, expression data, and metadata',
+		'tags': ['cells'],
+		'description': "Cells takes query parameters definied in the schema retrieved from the /initialize enpoint. <br>For categorical metadata keys filter based on `key=value` <br>"
+					   " For continous  metadata keys filter by `key=min,max`<br> Either value can be replaced by a \*. To have only a minimum value `key=min,\*`  To have only a maximum value `key=\*,max` <br>Graph data (if retrieved) is normalized"
+					   " To only retrieve cells that don't have a value for the key filter by `key`",
+		'parameters': [{
+			'name': '_nograph',
+			'description': "Do not calculate and send back graph (graph is sent by default)",
+			'in': 'path',
+			'type': 'boolean',
+		},
+			{
+				'name': '_includeisolated',
+				'description': "Include all cells in graph even if cluster is too small, this does nothing if _nograph is true.",
+				'in': 'path',
+				'type': 'boolean',
+			}
+		],
+
+		'responses': {
+			'200': {
+				'description': 'initialization data for UI',
+				'examples': {
+					'application/json': {
+						"data": {
+							"badmetadatacount": 0,
+							"cellcount": 0,
+							"cellids": ["..."],
+							"metadata": [
+								{
+									"CellName": "1001000173.G8",
+									"Class": "Neoplastic",
+									"Cluster_2d": "11",
+									"Cluster_2d_color": "#8C564B",
+									"Cluster_CNV": "1",
+									"Cluster_CNV_color": "#1F77B4",
+									"ERCC_reads": "152104",
+									"ERCC_to_non_ERCC": "0.562454470489481",
+									"Genes_detected": "1962",
+									"Location": "Tumor",
+									"Location.color": "#FF7F0E",
+									"Multimapping_reads_percent": "2.67",
+									"Neoplastic": "Neoplastic",
+									"Non_ERCC_reads": "270429",
+									"Sample.name": "BT_S2",
+									"Sample.name.color": "#AEC7E8",
+									"Sample.type": "Glioblastoma",
+									"Sample.type.color": "#1F77B4",
+									"Selection": "Unpanned",
+									"Selection.color": "#98DF8A",
+									"Splice_sites_AT.AC": "102",
+									"Splice_sites_Annotated": "122397",
+									"Splice_sites_GC.AG": "761",
+									"Splice_sites_GT.AG": "125741",
+									"Splice_sites_non_canonical": "56",
+									"Splice_sites_total": "126660",
+									"Total_reads": "1741039",
+									"Unique_reads": "1400382",
+									"Unique_reads_percent": "80.43",
+									"Unmapped_mismatch": "2.15",
+									"Unmapped_other": "0.18",
+									"Unmapped_short": "14.56",
+									"housekeeping_cluster": "2",
+									"housekeeping_cluster_color": "#AEC7E8",
+									"recluster_myeloid": "NA",
+									"recluster_myeloid_color": "NA"
+								},
+							],
+							"reactive": True,
+							"graph": [
+								[
+									"1001000173.G8",
+									0.93836,
+									0.28623
+								],
+
+								[
+									"1001000173.D4",
+									0.1662,
+									0.79438
+								]
+
+							],
+							"status": {
+								"error": False,
+								"errormessage": ""
+							}
+
+						},
+					}
+				},
+			},
+
+			'400': {
+				'description': 'bad query params',
+			}
+		}
+	})
+	def options(self):
+		# TODO Allow random downsampling
+		e = ExpressionMatrix(application.config["DATA_DIR"], True)
+		data = {
+			"reactive": False,
+			"cellids": [],
+			"metadata": [],
+			"cellcount": 0,
+			"badmetadatacount": 0,
+			"graph": [],
+			"ranges": {},
+			"expression": []
+		}
+		try:
+			args = request.args
+			# print("get cell args", args)
+			nograph = False
+			includeisolated = False
+			if "_nograph" in args:
+				nograph = bool(args["_nograph"])
+
+			if "_includeisolated" in args:
+				includeisolated = bool(args["_includeisolated"])
+			qs = parse_querystring(request.args)
+		except QueryStringError as e:
+			return make_payload({}, str(e), 400)
+		keptcells = []
+		output_cellset = "outcellset2"
+		if len(qs):
+			# TODO catch errors
+			error = False
+			filters = []
+			for key, value in qs.items():
+				if value["variabletype"] == 'categorical':
+					category_filter = []
+					if value["query"] == [""]:
+						filtername = "{}".format(key)
+						e.createCellSetUsingMetaData(filtername, key, "^$", True)
+						category_filter.append(filtername)
+					else:
+						for idx, item in enumerate(value["query"]):
+							queryval = item
+							filtername = "{}_{}".format(key, idx)
+							e.createCellSetUsingMetaData(filtername, key, queryval, False)
+							category_filter.append(filtername)
+					category_output_filter = "{}_out".format(key)
+					e.createCellSetUnion(",".join(category_filter), category_output_filter)
+					filters.append(category_output_filter)
+					for cellset in category_filter:
+						e.removeCellSet(cellset)
+				elif value["variabletype"] == 'continuous':
+					filtername = "{}".format(key)
+					filters.append(filtername)
+					if value["query"]["min"] and value["query"]["max"]:
+						e.createCellSetUsingNumericMetaDataBetween(filtername, key, value["query"]["min"],
+																   value["query"]["max"])
+					elif value["query"]["min"]:
+						e.createCellSetUsingNumericMetaDataGreaterThan(filtername, key, value["query"]["min"])
+					elif value["query"]["max"]:
+						e.createCellSetUsingNumericMetaDataLessThan(filtername, key, value["query"]["max"])
+					else:
+						filters.pop(filters.index(filtername))
+			e.createCellSetIntersection(",".join(filters), output_cellset)
+			cellidlist = e.getCellSet(output_cellset)
+			for cellset in filters:
+				e.removeCellSet(cellset)
+		else:
+			output_cellset = "AllCells"
+			cellidlist = e.getCellSet(output_cellset)
+		try:
+			graph = None
+			if not nograph and len(cellidlist) <= REACTIVE_LIMIT:
+				graphname = "cellgraph"
+				e.createCellGraph(graphname, output_cellset, application.config["HIGH_INFO_NAME"],
+								  keepIsolatedVertices=includeisolated)
+				e.computeCellGraphLayout(graphname)
+				vertices = e.getCellGraphVertices(graphname)
+				normalized_verticies = normalize_verticies(vertices)
+				graph = []
+				# reset cellids if create the graph
+				cellidlist = []
+				for i in range(len(normalized_verticies["labels"])):
+					graph.append((get_cell_name(normalized_verticies["labels"][i]), normalized_verticies["x"][i],
+								  normalized_verticies["y"][i]))
+					cellidlist.append(normalized_verticies["labels"][i])
+
+			keptcells = parse_metadata(cellidlist)
+			ranges = get_metadata_ranges(keptcells)
+			data["ranges"] = ranges
+			data["cellcount"] = len(keptcells)
+
+		finally:
+			if output_cellset != "AllCells":
+				e.removeCellSet(output_cellset)
 			data["reactive"] = True
 			data["metadata"] = keptcells
 			data["cellids"] = [m["CellName"] for m in keptcells]

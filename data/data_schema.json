@@ -2,157 +2,188 @@
 	"CellName": {
 		"type": "string",
 		"variabletype": "categorical",
-		"displayname": "Name"
+		"displayname": "Name",
+		"include": true
 	},
 	"Sample.type": {
 		"type": "string",
 		"variabletype": "categorical",
-		"displayname": "Sample Type"
+		"displayname": "Sample Type",
+		"include": true
 	},
 	"Selection": {
 		"type": "string",
 		"variabletype": "categorical",
-		"displayname": "Selection"
+		"displayname": "Selection",
+		"include": true
 	},
 	"Location": {
 		"type": "string",
 		"variabletype": "categorical",
-		"displayname": "Location"
+		"displayname": "Location",
+		"include": true
 	},
 	"Sample.name": {
 		"type": "string",
 		"variabletype": "categorical",
-		"displayname": "Sample Name"
+		"displayname": "Sample Name",
+		"include": true
 	},
 	"Total_reads": {
 		"type": "int",
 		"variabletype": "continuous",
-		"displayname": "Total Reads"
+		"displayname": "Total Reads",
+		"include": true
 	},
 	"Unique_reads": {
 		"type": "int",
 		"variabletype": "continuous",
-		"displayname": "Unique Reads"
+		"displayname": "Unique Reads",
+		"include": true
 	},
 	"Unique_reads_percent": {
 		"type": "float",
 		"variabletype": "continuous",
-		"displayname": "Unique Reads Percent"
+		"displayname": "Unique Reads Percent",
+		"include": true
 	},
 	"Splice_sites_total": {
 		"type": "int",
 		"variabletype": "continuous" ,
-		"displayname": "Splice Sites Total"
+		"displayname": "Splice Sites Total",
+		"include": true
 	},
 	"Splice_sites_Annotated": {
 		"type": "int",
 		"variabletype": "continuous",
-		"displayname": "Splice Sites Annotated"
+		"displayname": "Splice Sites Annotated",
+		"include": true
 	},
 	"Splice_sites_GT.AG": {
 		"type": "int",
 		"variabletype": "continuous",
-		"displayname": "Splice Sites GT/AG"
+		"displayname": "Splice Sites GT/AG",
+		"include": true
 	},
 	"Splice_sites_GC.AG": {
 		"type": "int",
 		"variabletype": "continuous",
-		"displayname": "Splice Sites GC/AG"
+		"displayname": "Splice Sites GC/AG",
+		"include": true
 	},
 	"Splice_sites_AT.AC": {
 		"type": "int",
 		"variabletype": "continuous",
-		"displayname": "Splice Sites AT/AC"
+		"displayname": "Splice Sites AT/AC",
+		"include": true
 	},
 	"Splice_sites_non_canonical": {
 		"type": "int",
 		"variabletype": "continuous",
-		"displayname": "Splice Sites Non-canonical"
+		"displayname": "Splice Sites Non-canonical",
+		"include": true
 	},
 	"Multimapping_reads_percent": {
 		"type": "float",
 		"variabletype": "continuous",
-		"displayname": "Multimapping Reads Percent"
+		"displayname": "Multimapping Reads Percent",
+		"include": true
 	},
 	"Unmapped_mismatch": {
 		"type": "float",
 		"variabletype": "continuous",
-		"displayname": "Unmapped Mismatch"
+		"displayname": "Unmapped Mismatch",
+		"include": true
 	},
 	"Unmapped_short": {
 		"type": "float",
 		"variabletype": "continuous",
-		"displayname": "Unmapped Short"
+		"displayname": "Unmapped Short",
+		"include": true
 	},
 	"Unmapped_other": {
 		"type": "float",
 		"variabletype": "continuous",
-		"displayname": "Unmapped Other"
+		"displayname": "Unmapped Other",
+		"include": true
 	},
 	"ERCC_reads": {
 		"type": "int",
 		"variabletype": "continuous",
-		"displayname": "ERCC Reads"
+		"displayname": "ERCC Reads",
+		"include": true
 	},
 	"Non_ERCC_reads": {
 		"type": "int",
 		"variabletype": "continuous",
-		"displayname": "Non-ERCC Reads"
+		"displayname": "Non-ERCC Reads",
+		"include": true
 	},
 	"ERCC_to_non_ERCC": {
 		"type": "float",
 		"variabletype": "continuous",
-		"displayname": "ERCC:Non-ERCC"
+		"displayname": "ERCC:Non-ERCC",
+		"include": true
 	},
 	"Genes_detected": {
 		"type": "int",
 		"variabletype": "continuous",
-		"displayname": "Genes Detected"
+		"displayname": "Genes Detected",
+		"include": true
 	},
 	"housekeeping_cluster": {
 		"type": "int",
 		"variabletype": "categorical",
-		"displayname": "Housekeeping Cluster"
+		"displayname": "Housekeeping Cluster",
+		"include": true
 	},
-    "housekeeping_cluster_color": {
-            "type": "string",
-            "variabletype": "categorical",
-            "displayname": "Housekeeping Cluster Color"
-        },
-    "Sample.type.color": {
-            "type": "string",
-            "variabletype": "categorical",
-            "displayname": "Sample Type Color"
-        },
-    "Selection.color": {
-            "type": "string",
-            "variabletype": "categorical",
-            "displayname": "Selection Color"
-        },
-    "Sample.name.color": {
-            "type": "string",
-            "variabletype": "categorical",
-            "displayname": "Sample Name Color"
-        },
-    "Location.color": {
-            "type": "string",
-            "variabletype": "categorical",
-            "displayname": "Location Color"
-        },
-    "Cluster_2d": {
-            "type": "int",
-            "variabletype": "categorical",
-            "displayname": "Cluster2d"
-        },
-    "Cluster_2d_color": {
-            "type": "string",
-            "variabletype": "categorical",
-            "displayname": "Cluster2d Color"
-        },
+	"housekeeping_cluster_color": {
+		"type": "string",
+		"variabletype": "categorical",
+		"displayname": "Housekeeping Cluster Color",
+		"include": true
+		},
+	"Sample.type.color": {
+        "type": "string",
+        "variabletype": "categorical",
+        "displayname": "Sample Type Color",
+		"include": true
+		},
+	"Selection.color": {
+        "type": "string",
+        "variabletype": "categorical",
+        "displayname": "Selection Color",
+		"include": true
+		},
+	"Sample.name.color": {
+        "type": "string",
+        "variabletype": "categorical",
+        "displayname": "Sample Name Color",
+		"include": true
+		},
+	"Location.color": {
+        "type": "string",
+        "variabletype": "categorical",
+        "displayname": "Location Color",
+		"include": true
+		},
+	"Cluster_2d": {
+        "type": "int",
+        "variabletype": "categorical",
+        "displayname": "Cluster2d",
+		"include": true
+		},
+	"Cluster_2d_color": {
+        "type": "string",
+        "variabletype": "categorical",
+        "displayname": "Cluster2d Color",
+		"include": true
+		},
   "EM2ClusterID": {
-            "type": "int",
-            "variabletype": "categorical",
-            "displayname": "Cluster2d"
-        }
+		"type": "int",
+		"variabletype": "categorical",
+		"displayname": "Cluster2d",
+		"include": true
+		}
 
 }
