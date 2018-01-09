@@ -12,3 +12,13 @@ GBM
 venv
 extesting
 
+ExpressionMatrix2.so
+Dockerfile-*
+*-data/*
+runServer.py
+templates/favicon.png
+templates/index.html
+templates/service-worker.js
+templates/static/*
+Graph.dot*
+app-*.cfg
