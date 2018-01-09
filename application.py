@@ -81,6 +81,7 @@ def filter(cell, qs):
 	:param qs: query string
 	:return: Boolean True if cell within filter, False if rejected by filter
 	"""
+	global e
 	keep = True
 	for key, value in qs.items():
 		if value["variabletype"] == 'categorical':
@@ -106,6 +107,7 @@ def parse_metadata(cells=False):
 	:param cells: list of cells (False for all cells)
 	:return: {metadata_key1: value1, metadata_key2: value1, ...}
 	"""
+	global e
 	metadata = []
 	if cells == False:
 		cells = e.getCellSet('AllCells')
@@ -116,9 +118,29 @@ def parse_metadata(cells=False):
 	return metadata
 
 
+def convert_variable(datatype, variable):
+	"""
+	Convert variable to number (float/int)
+	Used for dataset metadata and for query string
+	:param datatype: type to convert to
+	:param variable: value of variable
+	:return: converted variable
+	:raises: ValueError
+	"""
+	try:
+		if variable and datatype == "int":
+			variable = int(variable)
+		elif variable and datatype == "float":
+			variable = float(variable)
+		return variable
+	except ValueError:
+		raise
+
+
 def cast_value(key, value):
 	"""
-	Cast metadata value to proper type
+	Cast metadata value to proper type from dataset metadata
+	This needs to be flexible since metadata is often dirty
 	:param key: string key
 	:param value: string metadata value
 	:return:
@@ -126,12 +148,10 @@ def cast_value(key, value):
 	val_type = schema[key]["type"]
 	new_val = value
 	try:
-		if val_type == "int":
-			new_val = int(value)
-		elif val_type == "float":
-			new_val = float(value)
-		elif (key == "EM2Cluster") and value.startswith("Unclustered"):
+		if (key == "EM2Cluster") and value.startswith("Unclustered"):
 			new_val = "NoCluster"
+		else:
+			convert_variable(val_type, value)
 	except ValueError:
 		pass
 	if value == "":
@@ -190,6 +210,7 @@ def get_expression(cells, genes = ()):
 	:param genes: list of genes, or all genes if empty
 	:return: numpy expression matrix
 	"""
+	global e
 	if not cells:
 		cellset = "AllCells"
 	else:
@@ -312,8 +333,77 @@ def get_metadata_ranges(metadata):
 	for key, value in dict(options).items():
 		if ("options" in value and not value["options"]) or ("range" in value and not value["range"]["max"]):
 			del options[key]
-
 	return options
+
+
+def cells_from_query(qs, output_cellset):
+	"""
+	Get cells matching user's filter
+	:param qs: dictionary, query string from user
+	:param output_cellset: string, name for cellset
+	:return: list of cell ids
+	"""
+	global e
+	filters = []
+	for key, value in qs.items():
+		if value["variabletype"] == 'categorical':
+			category_filter = []
+			if value["query"] == [""]:
+				filtername = "{}".format(key)
+				e.createCellSetUsingMetaData(filtername, key, "^$", True)
+				category_filter.append(filtername)
+			else:
+				for idx, item in enumerate(value["query"]):
+					queryval = item
+					filtername = "{}_{}".format(key, idx)
+					e.createCellSetUsingMetaData(filtername, key, queryval, False)
+					category_filter.append(filtername)
+			category_output_filter = "{}_out".format(key)
+			e.createCellSetUnion(",".join(category_filter), category_output_filter)
+			filters.append(category_output_filter)
+			for cellset in category_filter:
+				e.removeCellSet(cellset)
+		elif value["variabletype"] == 'continuous':
+			filtername = "{}".format(key)
+			filters.append(filtername)
+			if value["query"]["min"] and value["query"]["max"]:
+				e.createCellSetUsingNumericMetaDataBetween(filtername, key, value["query"]["min"],
+														   value["query"]["max"])
+			elif value["query"]["min"]:
+				e.createCellSetUsingNumericMetaDataGreaterThan(filtername, key, value["query"]["min"])
+			elif value["query"]["max"]:
+				e.createCellSetUsingNumericMetaDataLessThan(filtername, key, value["query"]["max"])
+			else:
+				filters.pop(filters.index(filtername))
+	e.createCellSetIntersection(",".join(filters), output_cellset)
+	cellidlist = e.getCellSet(output_cellset)
+	for cellset in filters:
+		e.removeCellSet(cellset)
+	return cellidlist
+
+
+def create_graph(output_cellset, includeisolated=False, graphname="cellgraph"):
+	"""
+	Computes graphlayout for given cellset
+	:param output_cellset: string, name of EM2 cellset
+	:param includeisolated: bool, include vertices with no edges
+	:param graphname: string, name to save EM2 graph
+	:return: list of tuples [(label, x, y), ...], list of kept cellids
+	"""
+	global e
+	e.createCellGraph(graphname, output_cellset, application.config["HIGH_INFO_NAME"],
+					  keepIsolatedVertices=includeisolated)
+	e.computeCellGraphLayout(graphname)
+	vertices = e.getCellGraphVertices(graphname)
+	normalized_verticies = normalize_verticies(vertices)
+	graph = []
+	# reset cellids if create the graph
+	cellidlist = []
+	for i in range(len(normalized_verticies["labels"])):
+		graph.append((get_cell_name(normalized_verticies["labels"][i]), normalized_verticies["x"][i],
+					  normalized_verticies["y"][i]))
+		cellidlist.append(normalized_verticies["labels"][i])
+	return graph, cellidlist
 
 
 def normalize_verticies(verticies):
@@ -358,6 +448,7 @@ def all_genes():
 	Get list of all genenames in dataset
 	:return: list of gene names
 	"""
+	global e
 	return [e.geneName(i) for i in range(e.geneCount())]
 
 
@@ -366,6 +457,7 @@ def all_cells():
 	Get list of all cell names in dataset
 	:return: list of cell names
 	"""
+	global e
 	return [get_cell_name(i) for i in e.getCellSet('AllCells')]
 
 
@@ -377,6 +469,7 @@ def diffexp(expression_1, expression_2, num_genes=20):
 	:param num_genes: number of cells to return
 	:return: Top genes and mean expression for each gene in both cell sets
 	"""
+	global e
 	# TODO make sure genes aren't nans
 	diff_exp = stats.ttest_ind(expression_1, expression_2)
 	set1 = np.argsort(diff_exp.statistic)[::-1]
@@ -402,32 +495,13 @@ def diffexp(expression_1, expression_2, num_genes=20):
 	}
 
 
-# TODO do i need this one?
-def convert_variable(datatype, variable):
-	"""
-	Convert variable to number (float/int)
-	:param datatype: type to convert to
-	:param variable: value of variable
-	:return: converted variable
-	:raises: ValueError
-	"""
-	try:
-		if variable and datatype == "int":
-			variable = int(variable)
-		elif variable and datatype == "float":
-			variable = float(variable)
-		return variable
-	except ValueError:
-		print("Bad conversion")
-		raise
-
-
 def get_clusters(list_of_clusters):
 	"""
 	Get list of cells that are members of the cluster(s)
 	:param list_of_clusters: list of strings cluster names
 	:return: list of cell names
 	"""
+	global e
 	cluster_filter = "|".join(list_of_clusters)
 	cellset_name = "cluster_set_{}".format(cluster_filter)
 	cluster_filter = "^({})$".format(cluster_filter)
@@ -443,6 +517,7 @@ def get_cell_name(cellid):
 	:param cellid: int cell id
 	:return: string name of cell
 	"""
+	global e
 	return e.getCellMetaDataValue(cellid, "CellName")
 
 
@@ -452,6 +527,7 @@ def get_cell_id(cellname):
 	:param cellname: string cell name
 	:return: int id of cell
 	"""
+	global e
 	return e.cellIdFromString(cellname)
 
 
@@ -950,6 +1026,7 @@ class CellsAPI(Resource):
 		}
 	})
 	def get(self):
+		global e
 		# TODO Allow random downsampling
 		e = ExpressionMatrix(application.config["DATA_DIR"], True)
 		data = {
@@ -962,92 +1039,43 @@ class CellsAPI(Resource):
 			"ranges": {},
 			"expression": []
 		}
+		# Parse args
 		try:
 			args = request.args
-			# print("get cell args", args)
 			nograph = False
 			includeisolated = False
 			if "_nograph" in args:
 				nograph = bool(args["_nograph"])
-
 			if "_includeisolated" in args:
 				includeisolated = bool(args["_includeisolated"])
 			qs = parse_querystring(request.args)
 		except QueryStringError as e:
 			return make_payload({}, str(e), 400)
-		keptcells = []
-		output_cellset = "outcellset2"
+		cells_metadata = []
+		output_cellset = "outcellset"
+		cellidlist = []
 		if len(qs):
-			# TODO catch errors
-			error = False
-			filters = []
-			for key, value in qs.items():
-				if value["variabletype"] == 'categorical':
-					category_filter = []
-					if value["query"] == [""]:
-						filtername = "{}".format(key)
-						e.createCellSetUsingMetaData(filtername, key, "^$", True)
-						category_filter.append(filtername)
-					else:
-						for idx, item in enumerate(value["query"]):
-							queryval = item
-							filtername = "{}_{}".format(key, idx)
-							e.createCellSetUsingMetaData(filtername, key, queryval, False)
-							category_filter.append(filtername)
-					category_output_filter = "{}_out".format(key)
-					e.createCellSetUnion(",".join(category_filter), category_output_filter)
-					filters.append(category_output_filter)
-					for cellset in category_filter:
-						e.removeCellSet(cellset)
-				elif value["variabletype"] == 'continuous':
-					filtername = "{}".format(key)
-					filters.append(filtername)
-					if value["query"]["min"] and value["query"]["max"]:
-						e.createCellSetUsingNumericMetaDataBetween(filtername, key, value["query"]["min"],
-																   value["query"]["max"])
-					elif value["query"]["min"]:
-						e.createCellSetUsingNumericMetaDataGreaterThan(filtername, key, value["query"]["min"])
-					elif value["query"]["max"]:
-						e.createCellSetUsingNumericMetaDataLessThan(filtername, key, value["query"]["max"])
-					else:
-						filters.pop(filters.index(filtername))
-			e.createCellSetIntersection(",".join(filters), output_cellset)
-			cellidlist = e.getCellSet(output_cellset)
-			for cellset in filters:
-				e.removeCellSet(cellset)
+			cellidlist = cells_from_query(qs, output_cellset)
 		else:
 			output_cellset = "AllCells"
 			cellidlist = e.getCellSet(output_cellset)
 		try:
 			graph = None
 			if not nograph and len(cellidlist) <= REACTIVE_LIMIT:
-				graphname = "cellgraph"
-				e.createCellGraph(graphname, output_cellset, application.config["HIGH_INFO_NAME"],
-								  keepIsolatedVertices=includeisolated)
-				e.computeCellGraphLayout(graphname)
-				vertices = e.getCellGraphVertices(graphname)
-				normalized_verticies = normalize_verticies(vertices)
-				graph = []
-				# reset cellids if create the graph
-				cellidlist = []
-				for i in range(len(normalized_verticies["labels"])):
-					graph.append((get_cell_name(normalized_verticies["labels"][i]), normalized_verticies["x"][i],
-								  normalized_verticies["y"][i]))
-					cellidlist.append(normalized_verticies["labels"][i])
-
-			keptcells = parse_metadata(cellidlist)
-			ranges = get_metadata_ranges(keptcells)
+				graph, cellidlist = create_graph(output_cellset, includeisolated, "cellgraph_{}".format(time.time()))
+			cells_metadata = parse_metadata(cellidlist)
+			ranges = get_metadata_ranges(cells_metadata)
 			data["ranges"] = ranges
-			data["cellcount"] = len(keptcells)
-
+			data["cellcount"] = len(cells_metadata)
 		finally:
 			if output_cellset != "AllCells":
 				e.removeCellSet(output_cellset)
 			data["reactive"] = True
-			data["metadata"] = keptcells
-			data["cellids"] = [m["CellName"] for m in keptcells]
+			data["metadata"] = cells_metadata
+			data["cellids"] = [m["CellName"] for m in cells_metadata]
 			data["graph"] = graph
 		return make_payload(data)
+
 
 
 class InitializeAPI(Resource):
