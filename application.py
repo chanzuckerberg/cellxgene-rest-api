@@ -1,7 +1,8 @@
 import sys, os, time
 from collections import defaultdict
+from functools import wraps
 
-from flask import Flask, jsonify, send_from_directory, request, make_response, render_template
+from flask import Flask, jsonify, send_from_directory, request, make_response, render_template, Response
 from flask_restful import reqparse
 from flask_restful_swagger_2 import Api, swagger, Resource
 from flask_cors import CORS
@@ -25,15 +26,15 @@ CORS(application)
 SECRET_KEY = os.environ.get("SECRET_KEY", default=None)
 if not SECRET_KEY:
 	raise ValueError("No secret key set for Flask application")
-CXG_API_BASE = os.environ.get("CXG_API_BASE", default=None)
-if not CXG_API_BASE:
-	raise ValueError("No api base")
+APP_USERNAME = os.environ.get("APP_USERNAME", default="")
+APP_PASSWORD = os.environ.get("APP_PASSWORD", default="")
 
 # CONFIG
 application.config.from_pyfile('app.cfg', silent=True)
 application.config.update(
-	CXG_API_BASE=CXG_API_BASE,
-	SECRET_KEY=SECRET_KEY
+	SECRET_KEY=SECRET_KEY,
+	USERNAME=APP_USERNAME,
+	PASSWORD=APP_PASSWORD,
 )
 dir_path = os.path.dirname(os.path.realpath(__file__))
 application.config.update(
@@ -49,7 +50,7 @@ api = Api(application, api_version='0.1', produces=["application/json"], title="
 
 # Load expression matrix libray only after location path is configured
 sys.path.insert(0, application.config["EM2_DIR"])
-from ExpressionMatrix2 import ExpressionMatrix
+from ExpressionMatrix2 import ExpressionMatrix, NormalizationMethod
 
 # Param parsers
 metadata_parser = reqparse.RequestParser()
@@ -74,6 +75,31 @@ e = ExpressionMatrix(application.config["DATA_DIR"], True)
 schema = parse_schema(os.path.join(application.config["DATA_DIR"], application.config["SCHEMA_FILE"]))
 
 # ---- Helper Functions -------
+def check_auth(username, password):
+	"""This function is called to check if a username /
+	password combination is valid.
+	"""
+	return username == application.config["USERNAME"] and password == application.config["PASSWORD"]
+
+def authenticate():
+	"""Sends a 401 response that enables basic auth"""
+	return Response(
+	'Could not verify your access level for that URL.\n'
+	'You have to login with proper credentials', 401,
+	{'WWW-Authenticate': 'Basic realm="Login Required"'})
+
+
+def requires_auth(f):
+	@wraps(f)
+	def decorated(*args, **kwargs):
+		auth = request.authorization
+		if application.config["PASSWORD_PROTECT"] and (not auth or not check_auth(auth.username, auth.password)):
+			print("auth!!")
+			return authenticate()
+		return f(*args, **kwargs)
+	return decorated
+
+
 def filter(cell, qs):
 	"""
 	Check if cell's metadata are within the filtered parameters
@@ -534,17 +560,14 @@ def get_cell_id(cellname):
 # ---- Traditional Routes -----
 # CellxGene application
 @application.route('/')
+@requires_auth
 def index():
-	url_base = application.config["CXG_API_BASE"]
-	split_base = url_base.split("/")
-	prefix = '/'.join(split_base[:-1]) + "/"
-	version = "{}/".format(split_base[-1])
-	print(prefix, version)
-	return render_template("index.html", prefix=prefix, version=version)
+	return render_template("index.html")
 
 
 # renders swagger documentation
 @application.route('/swagger')
+@requires_auth
 def swag():
 	return render_template("swagger.html")
 
@@ -923,7 +946,6 @@ class DifferentialExpressionAPI(Resource):
 		# TODO make sure genes aren't nans
 		data = diffexp(expression_1, expression_2, num_genes)
 		return make_payload(data)
-
 
 class CellsAPI(Resource):
 	@swagger.doc({

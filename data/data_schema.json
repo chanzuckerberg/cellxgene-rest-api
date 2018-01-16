@@ -168,7 +168,7 @@
 		"include": true
 		},
 	"Cluster_2d": {
-        "type": "int",
+        "type": "string",
         "variabletype": "categorical",
         "displayname": "Cluster2d",
 		"include": true
@@ -180,7 +180,7 @@
 		"include": true
 		},
   "EM2ClusterID": {
-		"type": "int",
+		"type": "string",
 		"variabletype": "categorical",
 		"displayname": "Cluster2d",
 		"include": true
