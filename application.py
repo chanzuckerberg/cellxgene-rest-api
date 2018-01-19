@@ -378,6 +378,10 @@ def cells_from_query(qs, output_cellset):
 				filtername = "{}".format(key)
 				e.createCellSetUsingMetaData(filtername, key, "^$", True)
 				category_filter.append(filtername)
+			elif key.startswith("EM2Cluster") and "NoCluster" in value["query"]:
+				filtername = "{}".format(key)
+				e.createCellSetUsingMetaData(filtername, key, "Unclustered.*", True)
+				category_filter.append(filtername)
 			else:
 				for idx, item in enumerate(value["query"]):
 					queryval = item
