@@ -10,6 +10,7 @@ from flask_restful_swagger_2 import Api, swagger, Resource
 from flask_cors import CORS
 import numpy as np
 from scipy import stats
+from boto.s3.connection import S3Connection
 
 from schemaparse import parse_schema
 
@@ -1214,6 +1215,7 @@ class InitializeAPI(Resource):
             "reactivelimit": REACTIVE_LIMIT,
             "genes": genes,
         })
+
 
 
 api.add_resource(MetadataAPI, "/api/v0.1/metadata")
