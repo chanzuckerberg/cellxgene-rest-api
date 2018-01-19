@@ -342,7 +342,7 @@ def get_metadata_ranges(metadata):
 					elif schema[s]["type"] == "float":
 						datum = float(datum)
 					if schema[s]["variabletype"] == "categorical":
-						if (s == "EM2Cluster") and datum.startswith("Unclustered"):
+						if (s.startswith("EM2Cluster")) and datum.startswith("Unclustered"):
 							datum = "NoCluster"
 						options[s]["options"][datum] += 1
 					elif schema[s]["variabletype"] == "continuous":
@@ -1167,7 +1167,8 @@ class InitializeAPI(Resource):
 									"type": "int",
 									"variabletype": "continuous"
 								}
-							}
+							},
+							"genes": ["1/2-SBSRNA4", "A1BG", "A1BG-AS1"]
 
 						},
 						"status": {
@@ -1182,11 +1183,13 @@ class InitializeAPI(Resource):
 	def get(self):
 		metadata = parse_metadata()
 		options = get_metadata_ranges(metadata)
+		genes = all_genes()
 		return make_payload({
 			"schema": schema,
 			"ranges": options,
 			"cellcount": len(metadata),
 			"reactivelimit": REACTIVE_LIMIT,
+			"genes": genes,
 		})
 
 
