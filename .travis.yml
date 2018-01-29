@@ -14,8 +14,10 @@ addons:
 before_install:
   - echo
 install:
-- pip install nose requests ecs-deploy
+- pip install nose requests ecs-deploy flake8
 script:
+- set -eo pipefail
+- flake8 .
 - bin/build-docker $TRAVIS_BRANCH ${TRAVIS_COMMIT::8} $TRAVIS_BUILD_NUMBER
 - docker run -p 5000:5000 -e SECRET_KEY=secret -e CXG_API_BASE="http://0.0.0.0:5001/api/v0.1/cells" chanzuckerberg/cellxgene-rest-api:ci &
 - for i in {1..90}; do if http :5000/api/v0.1/initialize; then break; else echo "Waiting for server..."; sleep 1; fi; done
