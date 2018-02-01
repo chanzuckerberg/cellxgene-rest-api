@@ -103,7 +103,6 @@ class EndPoints(unittest.TestCase):
         result = self.session.get(url)
         result_json = result.json()
         assert result.status_code == 200
-        print(result_json["data"]["graph"])
         assert result_json["data"]["graph"] is None
 
     def test_cells_failure(self):
@@ -136,6 +135,7 @@ class EndPoints(unittest.TestCase):
                 "1001000010.G2",
                 "1001000010.G3",
                 "1001000010.H3",
+                "1001000012.A1",
                 "1001000012.A1",
                 "1001000012.A10"
             ],
