@@ -53,6 +53,9 @@ api = Api(application, api_version='0.1', produces=["application/json"], title="
           api_spec_url='/api/swagger',
           description='An API connecting ExpressionMatrix2 clustering algorithm to cellxgene')
 
+# Download data if not exists
+
+
 # Load expression matrix libray only after location path is configured
 sys.path.insert(0, application.config["EM2_DIR"])
 from ExpressionMatrix2 import ExpressionMatrix  # noqa: E402
