@@ -10,7 +10,7 @@ from flask_restful_swagger_2 import Api, swagger, Resource
 from flask_cors import CORS
 import numpy as np
 from scipy import stats
-from boto.s3.connection import S3Connection
+import boto3
 
 from schemaparse import parse_schema
 
@@ -33,6 +33,8 @@ if not SECRET_KEY:
     raise ValueError("No secret key set for Flask application")
 APP_USERNAME = os.environ.get("APP_USERNAME", default="")
 APP_PASSWORD = os.environ.get("APP_PASSWORD", default="")
+AWS_ACCESS_KEY_ID = os.environ.get("AWS_ACCESS_KEY_ID", default="")
+AWS_SECRET_ACCESS_KEY = os.environ.get("AWS_SECRET_ACCESS_KEY", default="")
 
 # CONFIG
 application.config.from_pyfile('app.cfg', silent=True)
@@ -40,6 +42,8 @@ application.config.update(
     SECRET_KEY=SECRET_KEY,
     USERNAME=APP_USERNAME,
     PASSWORD=APP_PASSWORD,
+    AWS_ACCESS_KEY_ID=AWS_ACCESS_KEY_ID,
+    AWS_SECRET_ACCESS_KEY=AWS_SECRET_ACCESS_KEY,
 )
 dir_path = os.path.dirname(os.path.realpath(__file__))
 application.config.update(
@@ -53,8 +57,34 @@ api = Api(application, api_version='0.1', produces=["application/json"], title="
           api_spec_url='/api/swagger',
           description='An API connecting ExpressionMatrix2 clustering algorithm to cellxgene')
 
-# Download data if not exists
 
+def download_data_from_s3():
+    client = boto3.client(
+        's3',
+        region_name=application.config["AWS_REGION"],
+        aws_access_key_id=application.config["AWS_ACCESS_KEY_ID"],
+        aws_secret_access_key=application.config["AWS_SECRET_ACCESS_KEY"],
+    )
+    resource = boto3.resource('s3')
+    download_s3_bucket(client, resource, application.config["AWS_BUCKET"], application.config["DATA_DIR"])
+
+
+def download_s3_bucket(client, resource, bucket, dest):
+    paginator = client.get_paginator('list_objects')
+    for result in paginator.paginate(Bucket=bucket):
+        if result.get('CommonPrefixes') is not None:
+            for subdir in result.get('CommonPrefixes'):
+                download_s3_bucket(client, resource, subdir.get('Prefix'), dest, bucket)
+        if result.get('Contents') is not None:
+            for file in result.get('Contents'):
+                if not os.path.exists(os.path.dirname(dest + os.sep + file.get('Key'))):
+                    os.makedirs(os.path.dirname(dest + os.sep + file.get('Key')))
+                resource.meta.client.download_file(bucket, file.get('Key'), dest + os.sep + file.get('Key'))
+
+
+# Download data if not exists
+if (not os.path.exists(application.config["DATA_DIR"])):
+    download_data_from_s3()
 
 # Load expression matrix libray only after location path is configured
 sys.path.insert(0, application.config["EM2_DIR"])
@@ -1218,7 +1248,6 @@ class InitializeAPI(Resource):
             "reactivelimit": REACTIVE_LIMIT,
             "genes": genes,
         })
-
 
 
 api.add_resource(MetadataAPI, "/api/v0.1/metadata")
