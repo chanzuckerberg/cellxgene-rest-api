@@ -33,8 +33,6 @@ if not SECRET_KEY:
     raise ValueError("No secret key set for Flask application")
 APP_USERNAME = os.environ.get("APP_USERNAME", default="")
 APP_PASSWORD = os.environ.get("APP_PASSWORD", default="")
-AWS_ACCESS_KEY_ID = os.environ.get("AWS_ACCESS_KEY_ID", default="")
-AWS_SECRET_ACCESS_KEY = os.environ.get("AWS_SECRET_ACCESS_KEY", default="")
 
 # CONFIG
 application.config.from_pyfile('app.cfg', silent=True)
@@ -42,8 +40,6 @@ application.config.update(
     SECRET_KEY=SECRET_KEY,
     USERNAME=APP_USERNAME,
     PASSWORD=APP_PASSWORD,
-    AWS_ACCESS_KEY_ID=AWS_ACCESS_KEY_ID,
-    AWS_SECRET_ACCESS_KEY=AWS_SECRET_ACCESS_KEY,
 )
 dir_path = os.path.dirname(os.path.realpath(__file__))
 application.config.update(
@@ -61,29 +57,31 @@ api = Api(application, api_version='0.1', produces=["application/json"], title="
 def download_data_from_s3():
     client = boto3.client(
         's3',
-        region_name=application.config["AWS_REGION"],
-        aws_access_key_id=application.config["AWS_ACCESS_KEY_ID"],
-        aws_secret_access_key=application.config["AWS_SECRET_ACCESS_KEY"],
     )
     resource = boto3.resource('s3')
-    download_s3_bucket(client, resource, application.config["AWS_BUCKET"], application.config["DATA_DIR"])
+    download_s3_bucket(client, resource, application.config["AWS_BUCKET"],
+                       application.config["DATA_DIR"], os.path.basename(application.config["DATA_DIR"]))
 
 
-def download_s3_bucket(client, resource, bucket, dest):
+def download_s3_bucket(client, resource, bucket, dest, prefix):
+    print("downloading")
     paginator = client.get_paginator('list_objects')
-    for result in paginator.paginate(Bucket=bucket):
+    for result in paginator.paginate(Bucket=bucket, Prefix=prefix):
         if result.get('CommonPrefixes') is not None:
             for subdir in result.get('CommonPrefixes'):
-                download_s3_bucket(client, resource, subdir.get('Prefix'), dest, bucket)
+                download_s3_bucket(client, resource, bucket, dest, subdir.get('Prefix'))
         if result.get('Contents') is not None:
             for file in result.get('Contents'):
-                if not os.path.exists(os.path.dirname(dest + os.sep + file.get('Key'))):
-                    os.makedirs(os.path.dirname(dest + os.sep + file.get('Key')))
-                resource.meta.client.download_file(bucket, file.get('Key'), dest + os.sep + file.get('Key'))
+                filename = file.get('Key')[len(prefix) + 1:]
+                full_destination = os.path.join(dest, filename)
+                full_destination_dir = os.path.dirname(full_destination)
+                if not os.path.exists(full_destination_dir):
+                    os.makedirs(full_destination_dir)
+                resource.meta.client.download_file(bucket, file.get('Key'), full_destination)
 
 
 # Download data if not exists
-if (not os.path.exists(application.config["DATA_DIR"])):
+if not os.path.exists(application.config["DATA_DIR"]):
     download_data_from_s3()
 
 # Load expression matrix libray only after location path is configured

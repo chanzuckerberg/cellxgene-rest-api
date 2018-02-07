@@ -15,6 +15,7 @@ extesting
 ExpressionMatrix2.so
 Dockerfile-*
 *-data/*
+data/*
 runServer.py
 templates/favicon.png
 templates/index.html
