@@ -33,9 +33,10 @@ if not SECRET_KEY:
     raise ValueError("No secret key set for Flask application")
 APP_USERNAME = os.environ.get("APP_USERNAME", default="")
 APP_PASSWORD = os.environ.get("APP_PASSWORD", default="")
+APP_CONFIG = os.environ.get("APP_CONFIG", default="")
 
 # CONFIG
-application.config.from_pyfile('app.cfg', silent=True)
+application.config.from_pyfile(APP_CONFIG, silent=True)
 application.config.update(
     SECRET_KEY=SECRET_KEY,
     USERNAME=APP_USERNAME,
