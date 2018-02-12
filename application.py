@@ -55,34 +55,52 @@ api = Api(application, api_version='0.1', produces=["application/json"], title="
           description='An API connecting ExpressionMatrix2 clustering algorithm to cellxgene')
 
 
+def s3_size_with_prefix(resource, bucket, prefix):
+    bucket = resource.Bucket(bucket)
+    size = 0
+    for obj in bucket.objects.filter(Prefix=prefix):
+        size += obj.size
+    return size
+
+
+def get_dir_size(path):
+    total = 0
+    for entry in os.scandir(path):
+        if entry.is_file():
+            total += entry.stat().st_size
+        elif entry.is_dir():
+            total += get_dir_size(entry.path)
+    return total
+
+
 def download_data_from_s3():
-    client = boto3.client(
-        's3',
-    )
     resource = boto3.resource('s3')
-    download_s3_bucket(client, resource, application.config["AWS_BUCKET"],
-                       application.config["DATA_DIR"], os.path.basename(application.config["DATA_DIR"]))
+    prefix = os.path.basename(application.config["DATA_DIR"])
+    # Download if doesn't exist or only partially exists
+    if (not os.path.exists(application.config["DATA_DIR"])) or (
+            get_dir_size(application.config["DATA_DIR"]) != s3_size_with_prefix(resource,
+                                                                                application.config["AWS_BUCKET"],
+                                                                                prefix)):
+        download_s3_bucket(resource, application.config["AWS_BUCKET"],
+                           application.config["DATA_DIR"], prefix)
 
 
-def download_s3_bucket(client, resource, bucket, dest, prefix):
-    print("downloading")
-    paginator = client.get_paginator('list_objects')
-    for result in paginator.paginate(Bucket=bucket, Prefix=prefix):
-        if result.get('CommonPrefixes') is not None:
-            for subdir in result.get('CommonPrefixes'):
-                download_s3_bucket(client, resource, bucket, dest, subdir.get('Prefix'))
-        if result.get('Contents') is not None:
-            for file in result.get('Contents'):
-                filename = file.get('Key')[len(prefix) + 1:]
-                full_destination = os.path.join(dest, filename)
-                full_destination_dir = os.path.dirname(full_destination)
-                if not os.path.exists(full_destination_dir):
-                    os.makedirs(full_destination_dir)
-                resource.meta.client.download_file(bucket, file.get('Key'), full_destination)
+def download_s3_bucket(resource, bucket, dest, prefix):
+    print("Downloading")
+    bucket = resource.Bucket(bucket)
+    for obj in bucket.objects.filter(Prefix=prefix):
+        filename = obj.key[len(prefix) + 1:]
+        full_destination = os.path.join(dest, filename)
+        full_destination_dir = os.path.dirname(full_destination)
+        if not os.path.exists(full_destination_dir):
+            os.makedirs(full_destination_dir)
+        with open(full_destination, 'wb') as data:
+            bucket.download_fileobj(obj.key, data)
 
 
 # Download data if not exists
 if not os.path.exists(application.config["DATA_DIR"]):
+    # TODO size check -- check size of bucket and local file
     download_data_from_s3()
 
 # Load expression matrix libray only after location path is configured
