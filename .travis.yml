@@ -27,6 +27,6 @@ after_success:
 - bin/push-docker
 deploy:
 - provider: script
-  script: ecs deploy stp-staging cellxgene-rest-api-staging --timeout 1000 --verbose --tag sha-${TRAVIS_COMMIT::8}
+  script: ecs deploy stp-staging cellxgene-rest-api-staging --timeout 1000 --tag sha-${TRAVIS_COMMIT::8}
   on:
     branch: master
