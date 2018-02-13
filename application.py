@@ -34,6 +34,8 @@ if not SECRET_KEY:
 APP_USERNAME = os.environ.get("APP_USERNAME", default="")
 APP_PASSWORD = os.environ.get("APP_PASSWORD", default="")
 APP_CONFIG = os.environ.get("APP_CONFIG", default="")
+if not APP_CONFIG:
+    raise ValueError("No config file set for Flask application")
 
 # CONFIG
 application.config.from_pyfile(APP_CONFIG, silent=True)
@@ -100,7 +102,6 @@ def download_s3_bucket(resource, bucket, dest, prefix):
 
 # Download data if not exists
 if not os.path.exists(application.config["DATA_DIR"]):
-    # TODO size check -- check size of bucket and local file
     download_data_from_s3()
 
 # Load expression matrix libray only after location path is configured
