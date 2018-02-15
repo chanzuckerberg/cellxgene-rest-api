@@ -150,14 +150,14 @@ class EndPoints(unittest.TestCase):
                 "1001000014.C1",
                 "1001000014.C3"
             ],
-            "num_genes": 5
+            "pval": 0.01
         })
         assert result.status_code == 200
         result_json = result.json()
         assert 'data' in result_json
-        assert len(result_json['data']["celllist1"]['topgenes']) == 5
+        assert len(result_json['data']["celllist1"]['topgenes']) > 0
         result = self.session.post(url, data={"clusters1": ["6"], "clusters2": ["3"]})
         assert result.status_code == 200
         result_json = result.json()
         assert 'data' in result_json
-        assert len(result_json['data']["celllist1"]['topgenes']) == 20
+        assert len(result_json['data']["celllist1"]['topgenes']) > 0

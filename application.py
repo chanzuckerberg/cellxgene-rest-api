@@ -36,10 +36,8 @@ APP_PASSWORD = os.environ.get("APP_PASSWORD", default="")
 CONFIG_FILE = os.environ.get("CONFIG_FILE", default="")
 if not CONFIG_FILE:
     raise ValueError("No config file set for Flask application")
-print(CONFIG_FILE)
 # CONFIG
 application.config.from_pyfile(CONFIG_FILE, silent=True)
-print(application.config)
 application.config.update(
     SECRET_KEY=SECRET_KEY,
     USERNAME=APP_USERNAME,
@@ -131,6 +129,8 @@ differential_parser.add_argument('clusters2', type=str, action="append", require
                                  help='Second group of clusters by name')
 differential_parser.add_argument('num_genes', type=int, required=False, default=20,
                                  help="Number of diff-expressed genes to return")
+differential_parser.add_argument('pval', type=float, required=False, default=0.0001,
+                                 help="Pval max of diff-expressed genes")
 
 e = ExpressionMatrix(application.config["DATA_DIR"], True)
 schema = parse_schema(os.path.join(application.config["DATA_DIR"], application.config["SCHEMA_FILE"]))
@@ -557,36 +557,49 @@ def all_cells():
     return [get_cell_name(i) for i in e.getCellSet('AllCells')]
 
 
-def diffexp(expression_1, expression_2, num_genes=20):
+def diffexp(expression_1, expression_2, pval=0.001, num_genes=20):
     """
     get top expressed genes from two different cell sets (uses t-test)
     :param expression_1: numpy expression array cell set 1
     :param expression_2: numpy expression array cell set 2
-    :param num_genes: number of cells to return
-    :return: Top genes and mean expression for each gene in both cell sets
+    :param pval: stats limit
+    :param num_genes: number of genes to limit results to
+    :return: Top genes and mean expression, pvalue, and average difference
+     between cell set1 to cell set 2 for each gene in both cell sets
+     sorted by t-test value
     """
     global e
-    # TODO make sure genes aren't nans
     diff_exp = stats.ttest_ind(expression_1, expression_2)
-    set1 = np.argsort(diff_exp.statistic)[::-1]
-    set1 = np.roll(set1, -np.count_nonzero(np.isnan(diff_exp.statistic)))[:num_genes]
-    set2 = np.argsort(diff_exp.statistic)[:num_genes]
-    mean_ex1_set1 = np.mean(expression_1[:, set1], axis=0)
-    mean_ex2_set1 = np.mean(expression_2[:, set1], axis=0)
-    mean_ex1_set2 = np.mean(expression_1[:, set2], axis=0)
-    mean_ex2_set2 = np.mean(expression_2[:, set2], axis=0)
-    genes_cellset_1 = [e.geneName(gid) for gid in set1]
-    genes_cellset_2 = [e.geneName(gid) for gid in set2]
+    set1 = np.logical_and(diff_exp.pvalue < pval, diff_exp.statistic > 0)
+    set2 = np.logical_and(diff_exp.pvalue < pval, diff_exp.statistic < 0)
+    stat1 = diff_exp.statistic[set1]
+    stat2 = diff_exp.statistic[set2]
+    sort_set1 = np.argsort(stat1)[::-1]
+    sort_set2 = np.argsort(stat2)
+    pval1 = diff_exp.pvalue[set1][sort_set1]
+    pval2 = diff_exp.pvalue[set2][sort_set2]
+    mean_ex1_set1 = np.mean(expression_1[:, set1], axis=0)[sort_set1]
+    mean_ex2_set1 = np.mean(expression_2[:, set1], axis=0)[sort_set1]
+    mean_ex1_set2 = np.mean(expression_1[:, set2], axis=0)[sort_set2]
+    mean_ex2_set2 = np.mean(expression_2[:, set2], axis=0)[sort_set2]
+    mean_diff1 = mean_ex1_set1 - mean_ex2_set1
+    mean_diff2 = mean_ex1_set2 - mean_ex2_set2
+    genes_cellset_1 = np.array([e.geneName(idx) for idx, val in enumerate(set1) if val])[sort_set1]
+    genes_cellset_2 = np.array([e.geneName(idx) for idx, val in enumerate(set2) if val])[sort_set2]
     return {
         "celllist1": {
-            "topgenes": genes_cellset_1,
-            "mean_expression_cellset1": mean_ex1_set1.tolist(),
-            "mean_expression_cellset2": mean_ex2_set1.tolist(),
+            "topgenes": genes_cellset_1.tolist()[:num_genes],
+            "mean_expression_cellset1": mean_ex1_set1.tolist()[:num_genes],
+            "mean_expression_cellset2": mean_ex2_set1.tolist()[:num_genes],
+            "pval": pval1.tolist()[:num_genes],
+            "ave_diff": mean_diff1.tolist()[:num_genes]
         },
         "celllist2": {
-            "topgenes": genes_cellset_2,
-            "mean_expression_cellset1": mean_ex1_set2.tolist(),
-            "mean_expression_cellset2": mean_ex2_set2.tolist(),
+            "topgenes": genes_cellset_2.tolist()[:num_genes],
+            "mean_expression_cellset1": mean_ex1_set2.tolist()[:num_genes],
+            "mean_expression_cellset2": mean_ex2_set2.tolist()[:num_genes],
+            "pval": pval2.tolist()[:num_genes],
+            "ave_diff": mean_diff2.tolist()[:num_genes]
         },
     }
 
@@ -931,7 +944,12 @@ class DifferentialExpressionAPI(Resource):
                 'name': 'body',
                 'in': 'body',
                 'schema': {
-                    "example": {"clusters1": ["6"], "clusters2": ["3"]}
+                    "example": {
+                        "celllist1": ["1001000176.C12", "1001000176.C7", "1001000177.F11"],
+                        "celllist2": ["1001000012.D2", "1001000017.F10", "1001000033.C3", "1001000229.D4"],
+                        "num_genes": 5,
+                        "pval": 0.000001,
+                    },
                 }
             }
         ],
@@ -942,59 +960,67 @@ class DifferentialExpressionAPI(Resource):
                     'application/json': {
                         "data": {
                             "celllist1": {
+                                "ave_diff": [
+                                    432.0132935431362,
+                                    12470.5623982637,
+                                    957.0246880086814
+                                ],
                                 "mean_expression_cellset1": [
-                                    3339.285714285714,
-                                    4806.642857142857,
-                                    241.07142857142858,
-                                    619.0714285714286,
-                                    203.42857142857142
+                                    438.6185567010309,
+                                    13315.536082474227,
+                                    1076.5773195876288
                                 ],
                                 "mean_expression_cellset2": [
-                                    93.55555555555556,
-                                    1667.3333333333333,
-                                    68.22222222222223,
-                                    2.2222222222222223,
-                                    0
+                                    6.605263157894737,
+                                    844.9736842105264,
+                                    119.55263157894737
+                                ],
+                                "pval": [
+                                    3.8906598089944563e-35,
+                                    1.9086226376018916e-25,
+                                    7.847480544069826e-21
                                 ],
                                 "topgenes": [
-                                    "SAT1",
+                                    "TMSB10",
                                     "FTL",
-                                    "RPS16",
-                                    "SRGN",
-                                    "CTSS"
+                                    "TMSB4X"
                                 ]
                             },
                             "celllist2": {
+                                "ave_diff": [
+                                    -6860.599158979924,
+                                    -519.1314432989691,
+                                    -10278.328269126423
+                                ],
                                 "mean_expression_cellset1": [
-                                    95.78571428571429,
-                                    47.642857142857146,
-                                    54.357142857142854,
-                                    47.142857142857146,
-                                    500.35714285714283
+                                    2.8350515463917527,
+                                    0.6185567010309279,
+                                    23.09278350515464
                                 ],
                                 "mean_expression_cellset2": [
-                                    1523.5555555555557,
-                                    203.44444444444446,
-                                    752.8888888888889,
-                                    240.22222222222223,
-                                    3110.222222222222
+                                    6863.434210526316,
+                                    519.75,
+                                    10301.421052631578
+                                ],
+                                "pval": [
+                                    4.662891833748732e-44,
+                                    3.6278087029927103e-37,
+                                    8.396825170618402e-35
                                 ],
                                 "topgenes": [
-                                    "CLU",
-                                    "COX7C",
-                                    "CKB",
-                                    "LOC550643",
-                                    "TUBA1A"
+                                    "SPARCL1",
+                                    "C1orf61",
+                                    "CLU"
                                 ]
                             }
                         },
                         "status": {
                             "error": False,
-                            "errormessage": "",
+                            "errormessage": ""
                         }
                     }
                 }
-            },
+            }
         }
     })
     def post(self):
@@ -1005,6 +1031,7 @@ class DifferentialExpressionAPI(Resource):
         cluster_list_1 = args.get('clusters1', [])
         cluster_list_2 = args.get('clusters2', [])
         num_genes = args.get("num_genes")
+        pval = args.get('pval')
         if cluster_list_1 and cluster_list_2:
             cell_list_1 = get_clusters(cluster_list_1)
             cell_list_2 = get_clusters(cluster_list_2)
@@ -1014,8 +1041,7 @@ class DifferentialExpressionAPI(Resource):
                                 400)
         expression_1 = get_expression(cell_list_1, all_genes())
         expression_2 = get_expression(cell_list_2, all_genes())
-        # TODO make sure genes aren't nans
-        data = diffexp(expression_1, expression_2, num_genes)
+        data = diffexp(expression_1, expression_2, pval, num_genes)
         return make_payload(data)
 
 
