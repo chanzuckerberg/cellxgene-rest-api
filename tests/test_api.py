@@ -150,7 +150,8 @@ class EndPoints(unittest.TestCase):
                 "1001000014.C1",
                 "1001000014.C3"
             ],
-            "pval": 0.01
+            "pval": 0.01,
+            "num_genes": 10
         })
         assert result.status_code == 200
         result_json = result.json()
