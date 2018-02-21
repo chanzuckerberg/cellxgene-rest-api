@@ -258,6 +258,10 @@ def parse_exp_data(cells=(), genes=(), limit=0, unexpressed_genes=False):
     :param unexpressed_genes: boolean, filter out genes with no expression
     :return: json: genes: list of genes, cells: expression matrix:, nonzero_gene_count: number of expressed genes
     """
+    if cells:
+        cells = sort_celllist_by_id(cells)
+    if genes:
+        genes = sort_genelist_by_id(genes)
     expression = get_expression(cells, genes)
     if not genes:
         genes = all_genes()
@@ -638,6 +642,42 @@ def get_cell_id(cellname):
     """
     global e
     return e.cellIdFromString(cellname)
+
+
+def get_gene_id(genename):
+    """
+    Get gene id from gene name
+    :param genename: string gene name
+    :return: int id of gene
+    """
+    global e
+    return e.geneIdFromName(genename)
+
+
+def sort_celllist_by_id(celllist):
+    """
+    Sorts list of cell names by their assigned cellid in EM2 (needed because idx info is lost
+    when creating cellset)
+    :param celllist:
+    :return: cellist
+    """
+    celllist_ids = np.array([get_cell_id(cell) for cell in celllist])
+    sort_idx = np.argsort(celllist_ids)
+    celllist = np.array(celllist)[sort_idx]
+    return celllist.tolist()
+
+
+def sort_genelist_by_id(genelist):
+    """
+    Sorts list of gene names by their assigned geneid in EM2 (needed because idx info is lost
+    when creating geneset)
+    :param genelist:
+    :return: geneist
+    """
+    genelist_ids = np.array([get_gene_id(gene) for gene in genelist])
+    sort_idx = np.argsort(genelist_ids)
+    genelist = np.array(genelist)[sort_idx]
+    return genelist.tolist()
 
 
 # ---- Traditional Routes -----
@@ -1039,6 +1079,7 @@ class DifferentialExpressionAPI(Resource):
             return make_payload([],
                                 "must include either (cellist1 and cellist2) or (clusters1 and clusters2) parameters",
                                 400)
+        cell_list_1 = sort_celllist_by_id(cell_list_1)
         expression_1 = get_expression(cell_list_1, all_genes())
         expression_2 = get_expression(cell_list_2, all_genes())
         data = diffexp(expression_1, expression_2, pval, num_genes)
