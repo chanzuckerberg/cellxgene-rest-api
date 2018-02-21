@@ -1,6 +1,7 @@
 import sys
 import os
 import time
+import json
 from collections import defaultdict
 from functools import wraps
 
@@ -16,12 +17,14 @@ from schemaparse import parse_schema
 
 # CONSTANTS
 REACTIVE_LIMIT = 100000
-INVALID_CELL_ID = 4294967295
-
 
 # Local Errors
 class QueryStringError(Exception):
     pass
+
+class InvalidGeneError(Exception):
+    pass
+
 
 
 application = Flask(__name__, static_url_path='/templates')
@@ -105,7 +108,7 @@ if not os.path.exists(application.config["DATA_DIR"]):
 
 # Load expression matrix libray only after location path is configured
 sys.path.insert(0, application.config["EM2_DIR"])
-from ExpressionMatrix2 import ExpressionMatrix  # noqa: E402
+from ExpressionMatrix2 import ExpressionMatrix, NormalizationMethod  # noqa: E402
 
 # Param parsers
 metadata_parser = reqparse.RequestParser()
@@ -201,7 +204,7 @@ def parse_metadata(cells=False):
     metadata = []
     if cells is False:
         cells = e.getCellSet('AllCells')
-    if INVALID_CELL_ID not in cells:
+    if ExpressionMatrix.invalidCellId not in cells:
         mdata = e.getCellsMetaData(cells)
         for i in mdata:
             metadata.append({k: cast_value(k, v) for k, v in i})
@@ -285,6 +288,33 @@ def parse_exp_data(cells=(), genes=(), limit=0, unexpressed_genes=False):
     }
 
 
+def get_gene_id(gene_name):
+    """
+    Gets geneid from name
+    :param gene_name:
+    :return: geneid
+    :raises: InvalidGeneError
+    """
+    gene_id = e.geneIdFromName(gene_name)
+    if gene_id == ExpressionMatrix.invalidGeneId:
+        raise InvalidGeneError("Invalid Gene: {} not found in dataset".format(gene_name))
+    return gene_id
+
+
+def is_genelist_valid(genelist):
+    """
+    Validates that all genes in list exist
+    :param genelist:
+    :returns: Boolean: valid
+    """
+    is_valid = True
+    try:
+        [get_gene_id(name) for name in genelist]
+    except InvalidGeneError:
+        is_valid = False
+    return is_valid
+
+
 def remove_unexpressed_genes(expression, genes):
     """
     Filter out genes that have no expression data from expression matrix
@@ -313,10 +343,13 @@ def get_expression(cells, genes=()):
         e.createCellSet(cellset, cell_ids)
     if not genes:
         expression = e.getDenseExpressionMatrix("AllGenes", cellset)
+        # TODO add normalization method back in
+        # expression = e.getDenseExpressionMatrix("AllGenes", cellset, normalizationMethod=NormalizationMethod.L2)
     else:
         genesetName = "ExpressionGeneSet_{}".format(time.time())
         e.createGeneSetFromGeneNames(genesetName, genes)
         expression = e.getDenseExpressionMatrix(genesetName, cellset)
+        # expression = e.getDenseExpressionMatrix(genesetName, cellset, normalizationMethod=NormalizationMethod.L2)
     if cells:
         e.removeCellSet(cellset)
     if genes:
@@ -352,7 +385,7 @@ def parse_querystring(qs):
     """
     query = {}
     for key in qs:
-        if key in ["_nograph", "_includeisolated", "_noexpression"]:
+        if key in ["_nograph", "_includeisolated", "_noexpression", "_genelist"]:
             continue
         value = qs.getlist(key)
         if key not in schema:
@@ -481,7 +514,7 @@ def cells_from_query(qs, output_cellset):
     return cellidlist
 
 
-def create_graph(output_cellset, includeisolated=False, graphname="cellgraph"):
+def create_graph(output_cellset, includeisolated=False, graphname="cellgraph", genelist=None):
     """
     Computes graphlayout for given cellset
     :param output_cellset: string, name of EM2 cellset
@@ -490,7 +523,19 @@ def create_graph(output_cellset, includeisolated=False, graphname="cellgraph"):
     :return: list of tuples [(label, x, y), ...], list of kept cellids
     """
     global e
-    e.createCellGraph(graphname, output_cellset, application.config["HIGH_INFO_NAME"],
+    geneset_name = "graph_geneset_{}".format(time.time())
+    similar_pairs_name = "graph_similarpairs_{}".format(time.time())
+    if genelist:
+        print(genelist)
+        e.createGeneSetFromGeneNames(geneset_name, genelist)
+        # create new similar pairs
+        e.findSimilarPairs4(similarPairsName=similar_pairs_name, geneSetName=geneset_name)
+        e.createCellGraph(graphname, output_cellset, application.config["HIGH_INFO_NAME"],
+                          keepIsolatedVertices=includeisolated)
+        # delete gene set and similar pairs set
+        e.removeGeneSet(geneset_name)
+    else:
+        e.createCellGraph(graphname, output_cellset, application.config["HIGH_INFO_NAME"],
                       keepIsolatedVertices=includeisolated)
     e.computeCellGraphLayout(graphname)
     vertices = e.getCellGraphVertices(graphname)
@@ -1109,6 +1154,12 @@ class CellsAPI(Resource):
                                "this does nothing if _nograph is true.",
                 'in': 'path',
                 'type': 'boolean',
+            },
+            {
+                'name': 'genelist',
+                'description': "List of genes to limit ",
+                'in': 'path',
+                'type': 'sting',
             }
         ],
 
@@ -1208,12 +1259,19 @@ class CellsAPI(Resource):
         # Parse args
         try:
             args = request.args
+            print("Args", args)
             nograph = False
             includeisolated = False
+            genelist = False
             if "_nograph" in args:
                 nograph = bool(args["_nograph"])
             if "_includeisolated" in args:
                 includeisolated = bool(args["_includeisolated"])
+            if "_genelist" in args:
+                # TODO Make this robust
+                genelist = args["_genelist"].split(",")
+                if not is_genelist_valid(genelist):
+                    raise InvalidGeneError()
             qs = parse_querystring(request.args)
         except QueryStringError as e:
             return make_payload({}, str(e), 400)
@@ -1228,7 +1286,10 @@ class CellsAPI(Resource):
         try:
             graph = None
             if not nograph and len(cellidlist) <= REACTIVE_LIMIT:
-                graph, cellidlist = create_graph(output_cellset, includeisolated, "cellgraph_{}".format(time.time()))
+                if genelist:
+                    graph, cellidlist = create_graph(output_cellset, includeisolated, "cellgraph_{}".format(time.time()), genelist=genelist)
+                else:
+                    graph, cellidlist = create_graph(output_cellset, includeisolated, "cellgraph_{}".format(time.time()))
             cells_metadata = parse_metadata(cellidlist)
             ranges = get_metadata_ranges(cells_metadata)
             data["ranges"] = ranges
