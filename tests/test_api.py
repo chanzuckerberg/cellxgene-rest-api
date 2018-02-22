@@ -89,7 +89,7 @@ class EndPoints(unittest.TestCase):
         result = self.session.get(url)
         assert result.status_code == 200
         url = "{base}{endpoint}?{params}".format(base=self.url_base, endpoint="cells", params="&".join(
-            ["Selection=Unpanned", "ERCC_reads=150000,170000"]))
+            ["Selection=Unpanned", "ERCC_reads=150000,200000"]))
         result = self.session.get(url)
         assert result.status_code == 200
         result_json = result.json()
@@ -99,7 +99,7 @@ class EndPoints(unittest.TestCase):
 
     def test_cells_nograph(self):
         url = "{base}{endpoint}?{params}".format(base=self.url_base, endpoint="cells", params="&".join(
-            ["Selection=Unpanned", "ERCC_reads=150000,170000", "_nograph=True"]))
+            ["Selection=Unpanned", "ERCC_reads=150000,200000", "_nograph=True"]))
         result = self.session.get(url)
         result_json = result.json()
         assert result.status_code == 200
@@ -157,7 +157,7 @@ class EndPoints(unittest.TestCase):
         result_json = result.json()
         assert 'data' in result_json
         assert len(result_json['data']["celllist1"]['topgenes']) > 0
-        result = self.session.post(url, data={"clusters1": ["6"], "clusters2": ["3"]})
+        result = self.session.post(url, data={"clusters1": ["5"], "clusters2": ["3"]})
         assert result.status_code == 200
         result_json = result.json()
         assert 'data' in result_json
