@@ -1,7 +1,6 @@
 import sys
 import os
 import time
-import json
 from collections import defaultdict
 from functools import wraps
 
@@ -18,13 +17,14 @@ from schemaparse import parse_schema
 # CONSTANTS
 REACTIVE_LIMIT = 100000
 
+
 # Local Errors
 class QueryStringError(Exception):
     pass
 
+
 class InvalidGeneError(Exception):
     pass
-
 
 
 application = Flask(__name__, static_url_path='/templates')
@@ -106,9 +106,9 @@ def download_s3_bucket(resource, bucket, dest, prefix):
 if not os.path.exists(application.config["DATA_DIR"]):
     download_data_from_s3()
 
-# Load expression matrix libray only after location path is configured
+# Load expression matrix library only after location path is configured
 sys.path.insert(0, application.config["EM2_DIR"])
-from ExpressionMatrix2 import ExpressionMatrix, NormalizationMethod  # noqa: E402
+from ExpressionMatrix2 import ExpressionMatrix, invalidCellId, invalidGeneId  # noqa: E402
 
 # Param parsers
 metadata_parser = reqparse.RequestParser()
@@ -204,7 +204,7 @@ def parse_metadata(cells=False):
     metadata = []
     if cells is False:
         cells = e.getCellSet('AllCells')
-    if ExpressionMatrix.invalidCellId not in cells:
+    if invalidCellId not in cells:
         mdata = e.getCellsMetaData(cells)
         for i in mdata:
             metadata.append({k: cast_value(k, v) for k, v in i})
@@ -286,19 +286,6 @@ def parse_exp_data(cells=(), genes=(), limit=0, unexpressed_genes=False):
         "cells": cell_data,
         "nonzero_gene_count": int(np.sum(expression.any(axis=1)))
     }
-
-
-def get_gene_id(gene_name):
-    """
-    Gets geneid from name
-    :param gene_name:
-    :return: geneid
-    :raises: InvalidGeneError
-    """
-    gene_id = e.geneIdFromName(gene_name)
-    if gene_id == ExpressionMatrix.invalidGeneId:
-        raise InvalidGeneError("Invalid Gene: {} not found in dataset".format(gene_name))
-    return gene_id
 
 
 def is_genelist_valid(genelist):
@@ -536,7 +523,7 @@ def create_graph(output_cellset, includeisolated=False, graphname="cellgraph", g
         e.removeGeneSet(geneset_name)
     else:
         e.createCellGraph(graphname, output_cellset, application.config["HIGH_INFO_NAME"],
-                      keepIsolatedVertices=includeisolated)
+                          keepIsolatedVertices=includeisolated)
     e.computeCellGraphLayout(graphname)
     vertices = e.getCellGraphVertices(graphname)
     normalized_verticies = normalize_verticies(vertices)
@@ -689,14 +676,19 @@ def get_cell_id(cellname):
     return e.cellIdFromString(cellname)
 
 
-def get_gene_id(genename):
+def get_gene_id(gene_name):
     """
     Get gene id from gene name
     :param genename: string gene name
     :return: int id of gene
+    :raises: InvalidGeneError
     """
     global e
-    return e.geneIdFromName(genename)
+
+    gene_id = e.geneIdFromName(gene_name)
+    if gene_id == invalidGeneId:
+        raise InvalidGeneError("Invalid Gene: {} not found in dataset".format(gene_name))
+    return gene_id
 
 
 def sort_celllist_by_id(celllist):
@@ -1268,10 +1260,9 @@ class CellsAPI(Resource):
             if "_includeisolated" in args:
                 includeisolated = bool(args["_includeisolated"])
             if "_genelist" in args:
-                # TODO Make this robust
                 genelist = args["_genelist"].split(",")
                 if not is_genelist_valid(genelist):
-                    raise InvalidGeneError()
+                    return make_payload([], "Some gene names are invalid", 400)
             qs = parse_querystring(request.args)
         except QueryStringError as e:
             return make_payload({}, str(e), 400)
@@ -1287,9 +1278,11 @@ class CellsAPI(Resource):
             graph = None
             if not nograph and len(cellidlist) <= REACTIVE_LIMIT:
                 if genelist:
-                    graph, cellidlist = create_graph(output_cellset, includeisolated, "cellgraph_{}".format(time.time()), genelist=genelist)
+                    graph, cellidlist = create_graph(output_cellset, includeisolated,
+                                                     "cellgraph_{}".format(time.time()), genelist=genelist)
                 else:
-                    graph, cellidlist = create_graph(output_cellset, includeisolated, "cellgraph_{}".format(time.time()))
+                    graph, cellidlist = create_graph(output_cellset, includeisolated,
+                                                     "cellgraph_{}".format(time.time()))
             cells_metadata = parse_metadata(cellidlist)
             ranges = get_metadata_ranges(cells_metadata)
             data["ranges"] = ranges
