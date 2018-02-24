@@ -22,4 +22,3 @@ templates/index.html
 templates/service-worker.js
 templates/static/*
 Graph.dot*
-app-*.cfg
