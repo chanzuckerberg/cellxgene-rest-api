@@ -24,6 +24,20 @@ class QueryStringError(Exception):
     pass
 
 
+class Vertex:
+
+    def __init__(self, cellId, x, y):
+        self.cellId = cellId
+        self.x_coord = x
+        self.y_coord = y
+
+    def x(self):
+        return float(self.x_coord)
+
+    def y(self):
+        return float(self.y_coord)
+
+
 application = Flask(__name__, static_url_path='/templates')
 CORS(application)
 
@@ -493,18 +507,30 @@ def create_graph(output_cellset, includeisolated=False, graphname="cellgraph"):
     :return: list of tuples [(label, x, y), ...], list of kept cellids
     """
     global e
-    e.createCellGraph(graphname, output_cellset, application.config["HIGH_INFO_NAME"],
-                      keepIsolatedVertices=includeisolated)
-    e.computeCellGraphLayout(graphname)
-    vertices = e.getCellGraphVertices(graphname)
-    normalized_verticies = normalize_verticies(vertices)
-    graph = []
-    # reset cellids if create the graph
-    cellidlist = []
-    for i in range(len(normalized_verticies["labels"])):
-        graph.append((get_cell_name(normalized_verticies["labels"][i]), normalized_verticies["x"][i],
-                      normalized_verticies["y"][i]))
-        cellidlist.append(normalized_verticies["labels"][i])
+    # Graph using EM2 or use metadata coordinates
+    if application.config["GRAPH_EM2"]:
+        e.createCellGraph(graphname, output_cellset, application.config["HIGH_INFO_NAME"],
+                          keepIsolatedVertices=includeisolated)
+        e.computeCellGraphLayout(graphname)
+        vertices = e.getCellGraphVertices(graphname)
+        normalized_verticies = normalize_verticies(vertices)
+        graph = []
+        # reset cellids if create the graph
+        cellidlist = []
+        for i in range(len(normalized_verticies["labels"])):
+            graph.append((get_cell_name(normalized_verticies["labels"][i]), normalized_verticies["x"][i],
+                          normalized_verticies["y"][i]))
+            cellidlist.append(normalized_verticies["labels"][i])
+    else:
+        # get metadata for each cell
+        cellidlist = e.getCellSet(output_cellset)
+        vertices = [Vertex(get_cell_name(cid), e.getCellMetaDataValue(cid, "tSNE_1"),
+                           e.getCellMetaDataValue(cid, "tSNE_2")) for cid in cellidlist]
+        normalized_verticies = normalize_verticies(vertices)
+        graph = []
+        for i in range(len(normalized_verticies["labels"])):
+            graph.append((normalized_verticies["labels"][i], normalized_verticies["x"][i],
+                          normalized_verticies["y"][i]))
     return graph, cellidlist
 
 
@@ -540,10 +566,8 @@ def normalize(v):
     :return: normalized vector
     """
     vec = np.array(v)
-    norm = np.linalg.norm(vec, ord=np.inf)
-    if norm == 0:
-        return vec
-    return vec / norm
+    vec = (vec - min(vec)) / (max(vec) - min(vec))
+    return vec
 
 
 def all_genes():
