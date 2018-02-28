@@ -35,6 +35,7 @@ APP_USERNAME = os.environ.get("APP_USERNAME", default="")
 APP_PASSWORD = os.environ.get("APP_PASSWORD", default="")
 CONFIG_FILE = os.environ.get("CONFIG_FILE", default="")
 CXG_API_BASE = os.environ.get("CXG_API_BASE", default="")
+print(CXG_API_BASE)
 if not CONFIG_FILE:
     raise ValueError("No config file set for Flask application")
 # CONFIG
@@ -688,6 +689,7 @@ def sort_genelist_by_id(genelist):
 @requires_auth
 def index():
     url_base = application.config["CXG_API_BASE"]
+    print("URL_BASE", url_base)
     return render_template("index.html", prefix=url_base)
 
 
