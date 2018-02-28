@@ -34,6 +34,7 @@ if not SECRET_KEY:
 APP_USERNAME = os.environ.get("APP_USERNAME", default="")
 APP_PASSWORD = os.environ.get("APP_PASSWORD", default="")
 CONFIG_FILE = os.environ.get("CONFIG_FILE", default="")
+CXG_API_BASE = os.environ.get("CXG_API_BASE", default="")
 if not CONFIG_FILE:
     raise ValueError("No config file set for Flask application")
 # CONFIG
@@ -42,6 +43,7 @@ application.config.update(
     SECRET_KEY=SECRET_KEY,
     USERNAME=APP_USERNAME,
     PASSWORD=APP_PASSWORD,
+    CXG_API_BASE=CXG_API_BASE,
 )
 dir_path = os.path.dirname(os.path.realpath(__file__))
 application.config.update(
@@ -685,7 +687,8 @@ def sort_genelist_by_id(genelist):
 @application.route('/')
 @requires_auth
 def index():
-    return render_template("index.html")
+    url_base = application.config["CXG_API_BASE"]
+    return render_template("index.html", prefix=url_base)
 
 
 # renders swagger documentation
