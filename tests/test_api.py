@@ -8,7 +8,7 @@ class EndPoints(unittest.TestCase):
 
     def setUp(self):
         # Local
-        self.url_base = os.environ["CXG_API_BASE"]
+        self.url_base = os.environ["CXG_API_BASE"] + "v0.1/"
         # Dev
         # self.url_base = "http://api-dev.clustering.czi.technology/api/v0.1/"
         # Prod
@@ -62,6 +62,7 @@ class EndPoints(unittest.TestCase):
         assert result.status_code == 200
         result_json = result.json()
         assert 'data' in result_json
+
         assert len(result_json['data']['genes']) == 2
         assert len(result_json["data"]['cells'])
         assert len(result_json["data"]['cells'][0]['e']) == 2

@@ -3,6 +3,7 @@ RUN mkdir -p /app
 WORKDIR /app
 COPY . ./
 RUN git submodule update --init ExpressionMatrix2
+RUN git submodule update --init cellxgene
 RUN npm install --prefix cellxgene/ cellxgene
 RUN npm run --prefix cellxgene build
 RUN mv cellxgene/build/* templates
