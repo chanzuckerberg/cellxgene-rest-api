@@ -735,8 +735,8 @@ def sort_genelist_by_id(genelist):
 @requires_auth
 def index():
     url_base = application.config["CXG_API_BASE"]
-    print("URL_BASE", url_base)
-    return render_template("index.html", prefix=url_base)
+    dataset_title = application.config["DATASET_TITLE"]
+    return render_template("index.html", prefix=url_base, datasetTitle=dataset_title)
 
 
 # renders swagger documentation
