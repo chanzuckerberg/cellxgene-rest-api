@@ -1273,7 +1273,7 @@ class CellsAPI(Resource):
         except QueryStringError as e:
             return make_payload({}, str(e), 400)
         cells_metadata = []
-        output_cellset = "outcellset"
+        output_cellset = "outcellset_{}".format(request.query_string)
         cellidlist = []
         if len(qs):
             cellidlist = cells_from_query(qs, output_cellset)
