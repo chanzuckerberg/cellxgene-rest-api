@@ -38,6 +38,6 @@ deploy:
     branch: production
 - provider: script
   script:
-  - ecs deploy stp-staging cxg-rest-api-pbmc33k-staging --timeout 10000 --tag sha-${TRAVIS_COMMIT::8}
+  - ecs deploy stp-staging cxg-rest-api-pbmc3k-staging --timeout 10000 --tag sha-${TRAVIS_COMMIT::8}
   on:
     branch: hinxton

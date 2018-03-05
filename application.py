@@ -8,6 +8,7 @@ from flask import Flask, jsonify, send_from_directory, request, make_response, r
 from flask_restful import reqparse
 from flask_restful_swagger_2 import Api, swagger, Resource
 from flask_cors import CORS
+from flask_cache import Cache
 import numpy as np
 from scipy import stats
 import boto3
@@ -40,6 +41,7 @@ class Vertex:
 
 application = Flask(__name__, static_url_path='/templates')
 CORS(application)
+cache = Cache(application, config={'CACHE_TYPE': 'simple'})
 
 # SECRETS
 SECRET_KEY = os.environ.get("SECRET_KEY", default=None)
@@ -49,7 +51,8 @@ APP_USERNAME = os.environ.get("APP_USERNAME", default="")
 APP_PASSWORD = os.environ.get("APP_PASSWORD", default="")
 CONFIG_FILE = os.environ.get("CONFIG_FILE", default="")
 CXG_API_BASE = os.environ.get("CXG_API_BASE", default="")
-print(CXG_API_BASE)
+
+
 if not CONFIG_FILE:
     raise ValueError("No config file set for Flask application")
 # CONFIG
@@ -498,6 +501,7 @@ def cells_from_query(qs, output_cellset):
     return cellidlist
 
 
+@cache.memoize(86400000)
 def create_graph(output_cellset, includeisolated=False, graphname="cellgraph"):
     """
     Computes graphlayout for given cellset
@@ -1269,7 +1273,7 @@ class CellsAPI(Resource):
         except QueryStringError as e:
             return make_payload({}, str(e), 400)
         cells_metadata = []
-        output_cellset = "outcellset"
+        output_cellset = "outcellset_{}".format(request.query_string)
         cellidlist = []
         if len(qs):
             cellidlist = cells_from_query(qs, output_cellset)
@@ -1279,7 +1283,7 @@ class CellsAPI(Resource):
         try:
             graph = None
             if not nograph and len(cellidlist) <= REACTIVE_LIMIT:
-                graph, cellidlist = create_graph(output_cellset, includeisolated, "cellgraph_{}".format(time.time()))
+                graph, cellidlist = create_graph(output_cellset, includeisolated, "cellgraph")
             cells_metadata = parse_metadata(cellidlist)
             ranges = get_metadata_ranges(cells_metadata)
             data["ranges"] = ranges
