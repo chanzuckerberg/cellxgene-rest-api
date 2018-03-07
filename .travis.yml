@@ -23,6 +23,7 @@ script:
   docker run -d -p 5000:5000 -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY -e AWS_DEFAULT_REGION \
   -e AWS_REGION=$AWS_DEFAULT_REGION -e CONFIG_FILE -e CXG_API_BASE -e ENV=ci chanzuckerberg/cellxgene-rest-api:ci
 - for i in {1..90}; do if http :5000/api/v0.1/initialize > /dev/null; then break; else echo "Waiting for server..."; sleep 1; fi; done
+- if ! http :5000/api/v0.1/initialize > /dev/null; then exit; fi;
 - nosetests tests/test_api.py
 after_success:
 - bash <(curl -s https://codecov.io/bash)
