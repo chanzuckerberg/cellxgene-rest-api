@@ -14,11 +14,14 @@ addons:
 before_install:
   - echo
 install:
+- set -eo pipefail
 - pip install nose requests ecs-deploy flake8
+- curl -o $HOME/bin/docker-helper https://raw.githubusercontent.com/chanzuckerberg/infra-tools/6402865/docker-helper
+- chmod +x $HOME/bin/docker-helper
 script:
 - set -eo pipefail
 - flake8 .
-- bin/build-docker $TRAVIS_BRANCH ${TRAVIS_COMMIT::8} $TRAVIS_BUILD_NUMBER
+- docker-helper build chanzuckerberg/cellxgene-rest-api . $TRAVIS_BRANCH ${TRAVIS_COMMIT::8} $TRAVIS_BUILD_NUMBER
 - |
   docker run -d -p 5000:5000 -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY -e AWS_DEFAULT_REGION \
   -e AWS_REGION=$AWS_DEFAULT_REGION -e CONFIG_FILE -e CXG_API_BASE -e ENV=ci chanzuckerberg/cellxgene-rest-api:ci
@@ -26,8 +29,9 @@ script:
 - if ! http :5000/api/v0.1/initialize > /dev/null; then exit 1; fi;
 - nosetests tests/test_api.py
 after_success:
+- set -eo pipefail
 - bash <(curl -s https://codecov.io/bash)
-- bin/push-docker
+- docker-helper push chanzuckerberg/cellxgene-rest-api
 deploy:
 - provider: script
   script:
