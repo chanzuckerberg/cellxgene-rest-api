@@ -35,11 +35,11 @@ after_success:
 deploy:
 - provider: script
   script:
-  - ecs deploy stp-staging cellxgene-rest-api-staging --timeout 10000 --tag sha-${TRAVIS_COMMIT::8}
+  - ecs deploy stp-staging stp-staging-cellxgene-rest-api --timeout 10000 --tag sha-${TRAVIS_COMMIT::8}
   on:
     branch: master
 - provider: script
   script:
-  - ecs deploy stp-staging cxg-rest-api-mouse-staging --timeout 10000 --tag sha-${TRAVIS_COMMIT::8}
+  - ecs deploy stp-staging stp-staging-cxg-rest-api-mouse --timeout 10000 --tag sha-${TRAVIS_COMMIT::8}
   on:
     branch: production
