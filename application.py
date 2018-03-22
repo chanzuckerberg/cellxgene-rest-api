@@ -1,8 +1,8 @@
-import sys
 import os
 import time
 from collections import defaultdict
 from functools import wraps
+from ExpressionMatrix2 import ExpressionMatrix  # noqa: E402
 
 from flask import Flask, jsonify, send_from_directory, request, make_response, render_template, Response
 from flask_restful import reqparse
@@ -67,7 +67,6 @@ dir_path = os.path.dirname(os.path.realpath(__file__))
 application.config.update(
     SCRATCH_DIR=os.path.join(dir_path, application.config["SCRATCH_DIR"]),
     DATA_DIR=os.path.join(dir_path, application.config["DATA_DIR"]),
-    EM2_DIR=os.path.join(dir_path, application.config["EM2_DIR"]),
 )
 
 # SWAGGER
@@ -122,10 +121,6 @@ def download_s3_bucket(resource, bucket, dest, prefix):
 # Download data if not exists
 if not os.path.exists(application.config["DATA_DIR"]):
     download_data_from_s3()
-
-# Load expression matrix libray only after location path is configured
-sys.path.insert(0, application.config["EM2_DIR"])
-from ExpressionMatrix2 import ExpressionMatrix  # noqa: E402
 
 # Param parsers
 metadata_parser = reqparse.RequestParser()
