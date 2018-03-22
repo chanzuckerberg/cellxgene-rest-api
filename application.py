@@ -9,6 +9,7 @@ from flask_restful import reqparse
 from flask_restful_swagger_2 import Api, swagger, Resource
 from flask_cors import CORS
 from flask_compress import Compress
+from flask_cache import Cache
 import numpy as np
 from scipy import stats
 import boto3
@@ -25,9 +26,24 @@ class QueryStringError(Exception):
     pass
 
 
+class Vertex:
+
+    def __init__(self, cellId, x, y):
+        self.cellId = cellId
+        self.x_coord = x
+        self.y_coord = y
+
+    def x(self):
+        return float(self.x_coord)
+
+    def y(self):
+        return float(self.y_coord)
+
+
 application = Flask(__name__, static_url_path='/templates')
 Compress(application)
 CORS(application)
+cache = Cache(application, config={'CACHE_TYPE': 'simple'})
 
 # SECRETS
 SECRET_KEY = os.environ.get("SECRET_KEY", default=None)
@@ -36,6 +52,9 @@ if not SECRET_KEY:
 APP_USERNAME = os.environ.get("APP_USERNAME", default="")
 APP_PASSWORD = os.environ.get("APP_PASSWORD", default="")
 CONFIG_FILE = os.environ.get("CONFIG_FILE", default="")
+CXG_API_BASE = os.environ.get("CXG_API_BASE", default="")
+
+
 if not CONFIG_FILE:
     raise ValueError("No config file set for Flask application")
 # CONFIG
@@ -44,6 +63,7 @@ application.config.update(
     SECRET_KEY=SECRET_KEY,
     USERNAME=APP_USERNAME,
     PASSWORD=APP_PASSWORD,
+    CXG_API_BASE=CXG_API_BASE,
 )
 dir_path = os.path.dirname(os.path.realpath(__file__))
 application.config.update(
@@ -483,6 +503,7 @@ def cells_from_query(qs, output_cellset):
     return cellidlist
 
 
+@cache.memoize(86400000)
 def create_graph(output_cellset, includeisolated=False, graphname="cellgraph"):
     """
     Computes graphlayout for given cellset
@@ -492,6 +513,22 @@ def create_graph(output_cellset, includeisolated=False, graphname="cellgraph"):
     :return: list of tuples [(label, x, y), ...], list of kept cellids
     """
     global e
+    # Graph using EM2 or use metadata coordinates
+    if application.config["GRAPH_EM2"]:
+        graph, cellidlist = create_graph_em2(output_cellset, includeisolated=False, graphname="cellgraph")
+    else:
+        graph, cellidlist = create_graph_tsne(output_cellset)
+    return graph, cellidlist
+
+
+def create_graph_em2(output_cellset, includeisolated=False, graphname="cellgraph"):
+    """
+    Computes graphlayout for given cellset using Expression Matrix 2
+    :param output_cellset: string, name of EM2 cellset
+    :param includeisolated: bool, include vertices with no edges
+    :param graphname: string, name to save EM2 graph
+    :return: list of tuples [(label, x, y), ...], list of kept cellids
+    """
     e.createCellGraph(graphname, output_cellset, application.config["HIGH_INFO_NAME"],
                       keepIsolatedVertices=includeisolated)
     e.computeCellGraphLayout(graphname)
@@ -504,6 +541,24 @@ def create_graph(output_cellset, includeisolated=False, graphname="cellgraph"):
         graph.append((get_cell_name(normalized_verticies["labels"][i]), normalized_verticies["x"][i],
                       normalized_verticies["y"][i]))
         cellidlist.append(normalized_verticies["labels"][i])
+    return graph, cellidlist
+
+
+def create_graph_tsne(output_cellset):
+    """
+    Layout for given cellset usig precomputed coordinates
+    :param output_cellset: string, name of EM2 cellset
+    :return: list of tuples [(label, x, y), ...], list of kept cellids
+    """
+    # get metadata for each cell
+    cellidlist = e.getCellSet(output_cellset)
+    vertices = [Vertex(get_cell_name(cid), e.getCellMetaDataValue(cid, "tSNE_1"),
+                       e.getCellMetaDataValue(cid, "tSNE_2")) for cid in cellidlist]
+    normalized_verticies = normalize_verticies(vertices)
+    graph = []
+    for i in range(len(normalized_verticies["labels"])):
+        graph.append((normalized_verticies["labels"][i], normalized_verticies["x"][i],
+                      normalized_verticies["y"][i]))
     return graph, cellidlist
 
 
@@ -539,10 +594,8 @@ def normalize(v):
     :return: normalized vector
     """
     vec = np.array(v)
-    norm = np.linalg.norm(vec, ord=np.inf)
-    if norm == 0:
-        return vec
-    return vec / norm
+    vec = (vec - min(vec)) / (max(vec) - min(vec))
+    return vec
 
 
 def all_genes():
@@ -687,7 +740,9 @@ def sort_genelist_by_id(genelist):
 @application.route('/')
 @requires_auth
 def index():
-    return render_template("index.html")
+    url_base = application.config["CXG_API_BASE"]
+    dataset_title = application.config["DATASET_TITLE"]
+    return render_template("index.html", prefix=url_base, datasetTitle=dataset_title)
 
 
 # renders swagger documentation
@@ -1220,7 +1275,7 @@ class CellsAPI(Resource):
         except QueryStringError as e:
             return make_payload({}, str(e), 400)
         cells_metadata = []
-        output_cellset = "outcellset"
+        output_cellset = "outcellset_{}".format(request.query_string)
         cellidlist = []
         if len(qs):
             cellidlist = cells_from_query(qs, output_cellset)
@@ -1230,7 +1285,7 @@ class CellsAPI(Resource):
         try:
             graph = None
             if not nograph and len(cellidlist) <= REACTIVE_LIMIT:
-                graph, cellidlist = create_graph(output_cellset, includeisolated, "cellgraph_{}".format(time.time()))
+                graph, cellidlist = create_graph(output_cellset, includeisolated, "cellgraph")
             cells_metadata = parse_metadata(cellidlist)
             ranges = get_metadata_ranges(cells_metadata)
             data["ranges"] = ranges
