@@ -8,6 +8,7 @@ from flask import Flask, jsonify, send_from_directory, request, make_response, r
 from flask_restful import reqparse
 from flask_restful_swagger_2 import Api, swagger, Resource
 from flask_cors import CORS
+from flask_compress import Compress
 from flask_cache import Cache
 import numpy as np
 from scipy import stats
@@ -40,6 +41,7 @@ class Vertex:
 
 
 application = Flask(__name__, static_url_path='/templates')
+Compress(application)
 CORS(application)
 cache = Cache(application, config={'CACHE_TYPE': 'simple'})
 
