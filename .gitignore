@@ -12,7 +12,6 @@ GBM
 venv
 extesting
 
-ExpressionMatrix2.so
 Dockerfile-*
 *-data/*
 data/*

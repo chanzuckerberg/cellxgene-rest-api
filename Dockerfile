@@ -13,13 +13,14 @@ FROM csweaver/cellxgene
 RUN mkdir -p /app
 WORKDIR /app
 COPY . ./
-RUN git submodule update --init ExpressionMatrix2
+RUN wget https://github.com/chanzuckerberg/ExpressionMatrix2/releases/download/0.5.0/ExpressionMatrix2-0.5.0.tar
+RUN tar -xf  ExpressionMatrix2-0.5.0.tar
+RUN mv ExpressionMatrix2-0.5.0/build/Release-ubuntu16-python3/ExpressionMatrix2.so .
+RUN rm -rf ExpressionMatrix2-0.5.0.tar ExpressionMatrix2-0.5.0
 RUN git submodule update --init cellxgene
 RUN npm install --prefix cellxgene/ cellxgene
 RUN npm run --prefix cellxgene build
 RUN mv cellxgene/build/* templates
-RUN mkdir -p ExpressionMatrix2/Release-ubuntu16-python3
-RUN cd ExpressionMatrix2/Release-ubuntu16-python3 && cmake ../src && make -j 3
 EXPOSE 5000:5000
 
 # Install chamber, for pulling secrets into the container.
