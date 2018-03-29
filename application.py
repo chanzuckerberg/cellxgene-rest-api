@@ -10,6 +10,7 @@ from flask_restful_swagger_2 import Api, swagger, Resource
 from flask_cors import CORS
 from flask_compress import Compress
 from flask_cache import Cache
+import pybrake.flask
 import numpy as np
 from scipy import stats
 import boto3
@@ -53,7 +54,15 @@ APP_USERNAME = os.environ.get("APP_USERNAME", default="")
 APP_PASSWORD = os.environ.get("APP_PASSWORD", default="")
 CONFIG_FILE = os.environ.get("CONFIG_FILE", default="")
 CXG_API_BASE = os.environ.get("CXG_API_BASE", default="")
-
+AIRBRAKE_PROJECT_ID = os.environ.get("AIRBRAKE_PROJECT_ID", default="")
+AIRBRAKE_PROJECT_KEY = os.environ.get("AIRBRAKE_PROJECT_KEY", default="")
+AIRBRAKE_ENVIRONMENT = os.environ.get("AIRBRAKE_ENVIRONMENT", default="")
+application.config['PYBRAKE'] = {
+    "project_id": AIRBRAKE_PROJECT_ID,
+    "project_key": AIRBRAKE_PROJECT_KEY,
+    "environment": AIRBRAKE_ENVIRONMENT
+}
+application = pybrake.flask.init_app(application)
 
 if not CONFIG_FILE:
     raise ValueError("No config file set for Flask application")
