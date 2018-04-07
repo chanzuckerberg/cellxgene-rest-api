@@ -1,14 +1,16 @@
-import sys
 import os
 import time
 from collections import defaultdict
 from functools import wraps
+from ExpressionMatrix2 import ExpressionMatrix  # noqa: E402
 
 from flask import Flask, jsonify, send_from_directory, request, make_response, render_template, Response
 from flask_restful import reqparse
 from flask_restful_swagger_2 import Api, swagger, Resource
 from flask_cors import CORS
+from flask_compress import Compress
 from flask_cache import Cache
+import pybrake.flask
 import numpy as np
 from scipy import stats
 import boto3
@@ -40,6 +42,7 @@ class Vertex:
 
 
 application = Flask(__name__, static_url_path='/templates')
+Compress(application)
 CORS(application)
 cache = Cache(application, config={'CACHE_TYPE': 'simple'})
 
@@ -51,7 +54,15 @@ APP_USERNAME = os.environ.get("APP_USERNAME", default="")
 APP_PASSWORD = os.environ.get("APP_PASSWORD", default="")
 CONFIG_FILE = os.environ.get("CONFIG_FILE", default="")
 CXG_API_BASE = os.environ.get("CXG_API_BASE", default="")
-
+AIRBRAKE_PROJECT_ID = os.environ.get("AIRBRAKE_PROJECT_ID", default="")
+AIRBRAKE_PROJECT_KEY = os.environ.get("AIRBRAKE_PROJECT_KEY", default="")
+AIRBRAKE_ENVIRONMENT = os.environ.get("AIRBRAKE_ENVIRONMENT", default="")
+application.config['PYBRAKE'] = {
+    "project_id": AIRBRAKE_PROJECT_ID,
+    "project_key": AIRBRAKE_PROJECT_KEY,
+    "environment": AIRBRAKE_ENVIRONMENT
+}
+application = pybrake.flask.init_app(application)
 
 if not CONFIG_FILE:
     raise ValueError("No config file set for Flask application")
@@ -67,7 +78,6 @@ dir_path = os.path.dirname(os.path.realpath(__file__))
 application.config.update(
     SCRATCH_DIR=os.path.join(dir_path, application.config["SCRATCH_DIR"]),
     DATA_DIR=os.path.join(dir_path, application.config["DATA_DIR"]),
-    EM2_DIR=os.path.join(dir_path, application.config["EM2_DIR"]),
 )
 
 # SWAGGER
@@ -122,10 +132,6 @@ def download_s3_bucket(resource, bucket, dest, prefix):
 # Download data if not exists
 if not os.path.exists(application.config["DATA_DIR"]):
     download_data_from_s3()
-
-# Load expression matrix libray only after location path is configured
-sys.path.insert(0, application.config["EM2_DIR"])
-from ExpressionMatrix2 import ExpressionMatrix  # noqa: E402
 
 # Param parsers
 metadata_parser = reqparse.RequestParser()

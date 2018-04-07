@@ -1,8 +1,11 @@
 aniso8601==1.2.1
+blinker==1.4
 certifi==2017.7.27.1
 chardet==3.0.4
 click==6.7
 Flask-Cors==3.0.3
+Flask-Cache==0.13.1
+Flask-Compress==1.4.0
 flask-restful-swagger-2==0.35
 Flask-RESTful==0.3.6
 Flask==0.12.2
@@ -14,6 +17,7 @@ MarkupSafe==1.0
 numpy==1.12.1
 oauthlib==2.0.2
 py==1.4.34
+pybrake==0.3.0
 pytest==3.2.1
 python-dateutil==2.6.1
 pytz==2017.2
