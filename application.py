@@ -331,22 +331,26 @@ def get_expression(cells, genes=()):
     :return: numpy expression matrix
     """
     global e
-    if not cells:
-        cellset = "AllCells"
-    else:
-        cell_ids = [get_cell_id(name) for name in cells]
-        cellset = "ExpressionCellSet"
-        e.createCellSet(cellset, cell_ids)
-    if not genes:
-        expression = e.getDenseExpressionMatrix("AllGenes", cellset)
-    else:
-        genesetName = "ExpressionGeneSet_{}".format(time.time())
-        e.createGeneSetFromGeneNames(genesetName, genes)
-        expression = e.getDenseExpressionMatrix(genesetName, cellset)
-    if cells:
-        e.removeCellSet(cellset)
-    if genes:
-        e.removeGeneSet(genesetName)
+    try:
+        if not cells:
+            cellset = "AllCells"
+        else:
+            cell_ids = [get_cell_id(name) for name in cells]
+            cellset = "ExpressionCellSet"
+            e.createCellSet(cellset, cell_ids)
+        if not genes:
+            expression = e.getDenseExpressionMatrix("AllGenes", cellset)
+        else:
+            genesetName = "ExpressionGeneSet_{}".format(time.time())
+            e.createGeneSetFromGeneNames(genesetName, genes)
+            expression = e.getDenseExpressionMatrix(genesetName, cellset)
+    except Exception as error:
+        raise error
+    finally:
+        if cells:
+            e.removeCellSet(cellset)
+        if genes:
+            e.removeGeneSet(genesetName)
     return expression
 
 
