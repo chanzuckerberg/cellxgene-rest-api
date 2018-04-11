@@ -26,7 +26,7 @@ before_script:
 
   - aws configure set profile.czi-legacy.role_arn arn:aws:iam::787588439240:role/cellxgene-travis-ci
   - aws configure set profile.czi-legacy.source_profile czi-id
-  - aws --profile czi sts get-caller-identity
+  - aws --profile czi-legacy sts get-caller-identity
 
 script:
 - set -eo pipefail
