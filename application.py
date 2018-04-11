@@ -236,6 +236,31 @@ def parse_metadata(cells=False):
     return metadata
 
 
+def metadata2table(metadata):
+    """
+    Turn results of parse_metadata to a table of metadata values with rows being cells
+    and columns being metadata fields
+    :param metadata: metadata from cell set produced by parse_metadata
+    :return: 2d list of metadata values with header
+    """
+    metadatatable = []
+    if len(metadata):
+        header = list(metadata[0].keys())
+        header.sort()
+        # put cell name in front
+        header.remove("CellName")
+        header = ["CellName"] + header
+        metadatatable.append(header)
+        for cell in metadata:
+            try:
+                row = [cell[mkey] if mkey in cell else "" for mkey in header]
+                metadatatable.append(row)
+            except Exception as error:
+                print(error)
+                print(cell)
+    return metadatatable
+
+
 def convert_variable(datatype, variable):
     """
     Convert variable to number (float/int)
@@ -487,6 +512,7 @@ def cells_from_query(qs, output_cellset):
     global e
     cellset_from_query(qs, output_cellset)
     cellidlist = e.getCellSet(output_cellset)
+    e.removeCellSet(output_cellset)
     return cellidlist
 
 
@@ -1337,9 +1363,8 @@ class CellsAPI(Resource):
 
 
 class EgressAPI(Resource):
-
     @swagger.doc({
-        'summary': 'Download expression data for filter based on metadata fields',
+        'summary': 'Download expression data for filter based on metadata filter',
         'tags': ['download'],
         'description': "Cells takes query parameters defined in the schema retrieved from the /initialize enpoint. "
                        "<br>For categorical metadata keys filter based on `key=value` <br>"
@@ -1369,7 +1394,7 @@ class EgressAPI(Resource):
             output_cellset = "AllCells"
         try:
             # create cellset
-            cells_from_query(qs, output_cellset)
+            cellset_from_query(qs, output_cellset)
             expression = e.getDenseExpressionMatrix("AllGenes", output_cellset)
             expression = expression.transpose()
             genes = all_genes()
@@ -1380,13 +1405,58 @@ class EgressAPI(Resource):
             writer.writerow([""] + [get_cell_name(cid) for cid in cellids])
             for idx, row in enumerate(expression):
                 writer.writerow([genes[idx]] + row.tolist())
-            return make_csv(si.getvalue(), "expression_matrix.csv")
+            return make_csv(si.getvalue(), "cxg_expression_matrix.csv")
         except Exception as error:
             print("ERROR creating csv", error)
             return make_payload([], "Error: creating csv download", 400)
         finally:
             if output_cellset != "AllCells":
                 e.removeCellSet(output_cellset)
+
+
+class MetadataEgressAPI(Resource):
+    @swagger.doc({
+        'summary': 'Download metadata for filter based on metadata filter',
+        'tags': ['download'],
+        'description': "Cells takes query parameters defined in the schema retrieved from the /initialize enpoint. "
+                       "<br>For categorical metadata keys filter based on `key=value` <br>"
+                       " For continuous metadata keys filter by `key=min,max`<br> Either value "
+                       "can be replaced by a \*. To have only a minimum value `key=min,\*`  To have only a maximum "
+                       "value `key=\*,max` <br>Graph data (if retrieved) is normalized"
+                       " To only retrieve cells that don't have a value for the key filter by `key`",
+        'responses': {
+            '200': {
+                'description': 'csv of metadata for cells',
+            },
+
+            '400': {
+                'description': 'bad query params or bad download',
+            }
+        }
+    })
+    def get(self):
+        global e
+        e = ExpressionMatrix(application.config["DATA_DIR"], True)
+        try:
+            qs = parse_querystring(request.args)
+        except QueryStringError as error:
+            return make_payload({}, str(error), 400)
+        output_cellset = "outcellset_{}".format(request.query_string)
+        if not len(qs):
+            output_cellset = "AllCells"
+
+        # create cellset
+        cell_ids = cells_from_query(qs, output_cellset)
+        metadata = parse_metadata(cell_ids)
+        metadata_table = metadata2table(metadata)
+        # transform to file
+        si = io.StringIO()
+        writer = csv.writer(si)
+        writer.writerows(metadata_table)
+        return make_csv(si.getvalue(), "cxg_metadata.csv")
+        # except Exception as error:
+        #     print("ERROR creating csv", error)
+        #     return make_payload([], "Error: creating csv download", 400)
 
 
 class InitializeAPI(Resource):
@@ -1487,7 +1557,8 @@ api.add_resource(ExpressionAPI, "/api/v0.1/expression")
 api.add_resource(InitializeAPI, "/api/v0.1/initialize")
 api.add_resource(CellsAPI, "/api/v0.1/cells")
 api.add_resource(DifferentialExpressionAPI, "/api/v0.1/diffexpression")
-api.add_resource(EgressAPI, "/api/v0.1/egress")
+api.add_resource(EgressAPI, "/api/v0.1/download")
+api.add_resource(MetadataEgressAPI, "/api/v0.1/metadatadownload")
 
 if __name__ == "__main__":
     application.run(host='0.0.0.0', debug=True)
