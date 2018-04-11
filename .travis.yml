@@ -20,8 +20,8 @@ install:
 - chmod +x $HOME/bin/docker-helper
 before_script:
   - set -eo pipefail
-  - aws configure set aws_access_key_id     $CZIIAM_AWS_ACCESS_KEY_ID     --profile czi-id
-  - aws configure set aws_secret_access_key $CZIIAM_AWS_SECRET_ACCESS_KEY --profile czi-id
+  - aws configure set aws_access_key_id     $CZIID_AWS_ACCESS_KEY_ID     --profile czi-id
+  - aws configure set aws_secret_access_key $CZIID_AWS_SECRET_ACCESS_KEY --profile czi-id
   - aws --profile czi-id sts get-caller-identity
 
   - aws configure set profile.czi-legacy.role_arn arn:aws:iam::787588439240:role/cellxgene-travis-ci
