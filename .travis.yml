@@ -15,7 +15,7 @@ before_install:
   - echo
 install:
 - set -eo pipefail
-- pip install nose requests ecs-deploy flake8
+- pip install nose requests ecs-deploy flake8 awscli
 - curl -o $HOME/bin/docker-helper https://raw.githubusercontent.com/chanzuckerberg/infra-tools/6402865/docker-helper
 - chmod +x $HOME/bin/docker-helper
 before_script:
