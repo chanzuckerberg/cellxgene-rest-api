@@ -512,7 +512,6 @@ def cells_from_query(qs, output_cellset):
     global e
     cellset_from_query(qs, output_cellset)
     cellidlist = e.getCellSet(output_cellset)
-    e.removeCellSet(output_cellset)
     return cellidlist
 
 
@@ -1444,19 +1443,22 @@ class MetadataEgressAPI(Resource):
         output_cellset = "outcellset_{}".format(request.query_string)
         if not len(qs):
             output_cellset = "AllCells"
-
-        # create cellset
-        cell_ids = cells_from_query(qs, output_cellset)
-        metadata = parse_metadata(cell_ids)
-        metadata_table = metadata2table(metadata)
-        # transform to file
-        si = io.StringIO()
-        writer = csv.writer(si)
-        writer.writerows(metadata_table)
-        return make_csv(si.getvalue(), "cxg_metadata.csv")
-        # except Exception as error:
-        #     print("ERROR creating csv", error)
-        #     return make_payload([], "Error: creating csv download", 400)
+        try:
+            # create cellset
+            cell_ids = cells_from_query(qs, output_cellset)
+            metadata = parse_metadata(cell_ids)
+            metadata_table = metadata2table(metadata)
+            # transform to file
+            si = io.StringIO()
+            writer = csv.writer(si)
+            writer.writerows(metadata_table)
+            return make_csv(si.getvalue(), "cxg_metadata.csv")
+        except Exception as error:
+            print("ERROR creating csv", error)
+            return make_payload([], "Error: creating csv download", 400)
+        finally:
+            if output_cellset != "AllCells":
+                e.removeCellSet(output_cellset)
 
 
 class InitializeAPI(Resource):
