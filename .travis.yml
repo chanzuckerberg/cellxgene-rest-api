@@ -18,13 +18,24 @@ install:
 - pip install nose requests ecs-deploy flake8
 - curl -o $HOME/bin/docker-helper https://raw.githubusercontent.com/chanzuckerberg/infra-tools/6402865/docker-helper
 - chmod +x $HOME/bin/docker-helper
+before_script:
+  - set -eo pipefail
+  - aws configure set aws_access_key_id     $CZIIAM_AWS_ACCESS_KEY_ID     --profile czi-id
+  - aws configure set aws_secret_access_key $CZIIAM_AWS_SECRET_ACCESS_KEY --profile czi-id
+  - aws --profile czi-id sts get-caller-identity
+
+  - aws configure set profile.czi-legacy.role_arn arn:aws:iam::787588439240:role/cellxgene-travis-ci
+  - aws configure set profile.czi-legacy.source_profile czi-id
+  - aws --profile czi sts get-caller-identity
+
 script:
 - set -eo pipefail
 - flake8 .
 - docker-helper build chanzuckerberg/cellxgene-rest-api . $TRAVIS_BRANCH ${TRAVIS_COMMIT::8} $TRAVIS_BUILD_NUMBER
 - |
-  docker run -d -p 5000:5000 --name cxg -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY -e AWS_DEFAULT_REGION \
-  -e AWS_REGION=$AWS_DEFAULT_REGION -e CONFIG_FILE -e CXG_API_BASE -e ENV=ci chanzuckerberg/cellxgene-rest-api:ci
+  docker run -d -p 5000:5000 --name cxg -e HOME=/home -v $$HOME/.aws:/home/.aws -e AWS_DEFAULT_REGION \
+  -e AWS_PROFILE=czi-legacy -e AWS_REGION=$AWS_DEFAULT_REGION -e CONFIG_FILE -e CXG_API_BASE -e ENV=ci \
+  chanzuckerberg/cellxgene-rest-api:ci
 - for i in {1..90}; do if http :5000/api/v0.1/initialize > /dev/null; then break; else echo "Waiting for server..."; sleep 1; fi; done
 - if ! http :5000/api/v0.1/initialize > /dev/null; then echo `docker logs cxg`; exit 1; fi;
 - nosetests tests/test_api.py
@@ -35,16 +46,16 @@ after_success:
 deploy:
 - provider: script
   script:
-  - ecs deploy stp-staging stp-staging-cellxgene-rest-api --timeout 10000 --tag sha-${TRAVIS_COMMIT::8}
+  - ecs deploy --profile czi-legacy stp-staging stp-staging-cellxgene-rest-api --timeout 10000 --tag sha-${TRAVIS_COMMIT::8}
   on:
     branch: master
 - provider: script
   script:
-  - ecs deploy stp-staging stp-staging-cxg-rest-api-mouse --timeout 10000 --tag sha-${TRAVIS_COMMIT::8}
+  - ecs deploy --profile czi-legacy stp-staging stp-staging-cxg-rest-api-mouse --timeout 10000 --tag sha-${TRAVIS_COMMIT::8}
   on:
     branch: production
 - provider: script
   script:
-  - ecs deploy stp-staging cxg-rest-api-pbmc3k-staging --timeout 10000 --tag sha-${TRAVIS_COMMIT::8}
+  - ecs deploy --profile czi-legacy stp-staging cxg-rest-api-pbmc3k-staging --timeout 10000 --tag sha-${TRAVIS_COMMIT::8}
   on:
     branch: hinxton
