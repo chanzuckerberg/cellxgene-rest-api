@@ -28,4 +28,6 @@ EXPOSE 5000:5000
 ADD https://github.com/segmentio/chamber/releases/download/v1.16.0/chamber-v1.16.0-linux-amd64 /bin/chamber
 RUN chmod +x /bin/chamber
 
+ENV AWS_SDK_LOAD_CONFIG=1
+
 CMD chamber exec stp-$ENV-cellxgene -- python3 application.py
