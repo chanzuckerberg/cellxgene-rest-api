@@ -1,7 +1,5 @@
 import os
 import time
-import io
-import csv
 from collections import defaultdict
 from functools import wraps
 from ExpressionMatrix2 import ExpressionMatrix  # noqa: E402
@@ -12,6 +10,7 @@ from flask_restful_swagger_2 import Api, swagger, Resource
 from flask_cors import CORS
 from flask_compress import Compress
 from flask_cache import Cache
+from werkzeug.datastructures import Headers
 import pybrake.flask
 import numpy as np
 from scipy import stats
@@ -236,31 +235,6 @@ def parse_metadata(cells=False):
     return metadata
 
 
-def metadata2table(metadata):
-    """
-    Turn results of parse_metadata to a table of metadata values with rows being cells
-    and columns being metadata fields
-    :param metadata: metadata from cell set produced by parse_metadata
-    :return: 2d list of metadata values with header
-    """
-    metadatatable = []
-    if len(metadata):
-        header = list(metadata[0].keys())
-        header.sort()
-        # put cell name in front
-        header.remove("CellName")
-        header = ["CellName"] + header
-        metadatatable.append(header)
-        for cell in metadata:
-            try:
-                row = [cell[mkey] if mkey in cell else "" for mkey in header]
-                metadatatable.append(row)
-            except Exception as error:
-                print(error)
-                print(cell)
-    return metadatatable
-
-
 def convert_variable(datatype, variable):
     """
     Convert variable to number (float/int)
@@ -401,18 +375,61 @@ def make_payload(data, errormessage="", errorcode=200):
     }), errorcode)
 
 
-def make_csv(data, filename="export.csv"):
+def expression_matrix_csv(output_cellset, filename="cxg_expression_matrix.csv"):
     """
-    Creates csv response for requests
-    :param data: json data
-    :param errormessage: error message
-    :param errorcode: http error code
-    :return: flask json repsonse
+    Creates csv download for a cellset
+    :param output_cellset: name of cellset with data
+    :return: Flask response containing csv of expression matrix
     """
-    output = make_response(data)
-    output.headers["Content-Disposition"] = "attachment; filename={}".format(filename)
-    output.headers["Content-type"] = "text/csv"
-    return output
+    global e
+    expression = e.getDenseExpressionMatrix("AllGenes", output_cellset)
+    expression = expression.transpose()
+    genes = all_genes()
+    cellids = e.getCellSet(output_cellset)
+
+    def generate_expression_matrix_csv(expression, genes, cellids):
+        first_row = [""] + [get_cell_name(cid) for cid in cellids]
+        yield ",".join(first_row) + "\n"
+        for idx, row in enumerate(expression):
+            line = [genes[idx]] + row.tolist()
+            yield ",".join(str(e) for e in line) + "\n"
+
+    headers = Headers()
+    headers.add("Content-Disposition", "attachment; filename={}".format(filename))
+    return Response(generate_expression_matrix_csv(expression, genes, cellids), headers=headers, mimetype='text/csv')
+
+
+def metadata_csv(cell_ids, filename="cxg_metadata.csv"):
+    """
+    Creates csv download for a cellset
+    :param output_cellset: name of cellset with data
+    :return: Flask response containing csv of expression matrix
+    """
+    global e
+    metadata = parse_metadata(cell_ids)
+
+    def metadata2table(metadata):
+        """
+        Generator to turn results of parse_metadata to a table of metadata values with rows being cells
+        and columns being metadata fields
+        :param metadata: metadata from cell set produced by parse_metadata
+        :return: 2d list of metadata values with header
+        """
+        if not len(metadata):
+            return
+        header = list(metadata[0].keys())
+        header.sort()
+        # put cell name in front
+        header.remove("CellName")
+        header = ["CellName"] + header
+        yield ",".join(header) + "\n"
+        for cell in metadata:
+            row = [cell.get(mkey, "") for mkey in header]
+            yield ",".join(row) + "\n"
+
+    headers = Headers()
+    headers.add("Content-Disposition", "attachment; filename={}".format(filename))
+    return Response(metadata2table(metadata), headers=headers, mimetype='text/csv')
 
 
 def parse_querystring(qs):
@@ -1394,17 +1411,7 @@ class EgressAPI(Resource):
         try:
             # create cellset
             cellset_from_query(qs, output_cellset)
-            expression = e.getDenseExpressionMatrix("AllGenes", output_cellset)
-            expression = expression.transpose()
-            genes = all_genes()
-            cellids = e.getCellSet(output_cellset)
-            # transform to file
-            si = io.StringIO()
-            writer = csv.writer(si)
-            writer.writerow([""] + [get_cell_name(cid) for cid in cellids])
-            for idx, row in enumerate(expression):
-                writer.writerow([genes[idx]] + row.tolist())
-            return make_csv(si.getvalue(), "cxg_expression_matrix.csv")
+            return expression_matrix_csv(output_cellset)
         except Exception as error:
             print("ERROR creating csv", error)
             return make_payload([], "Error: creating csv download", 400)
@@ -1446,13 +1453,7 @@ class MetadataEgressAPI(Resource):
         try:
             # create cellset
             cell_ids = cells_from_query(qs, output_cellset)
-            metadata = parse_metadata(cell_ids)
-            metadata_table = metadata2table(metadata)
-            # transform to file
-            si = io.StringIO()
-            writer = csv.writer(si)
-            writer.writerows(metadata_table)
-            return make_csv(si.getvalue(), "cxg_metadata.csv")
+            return metadata_csv(cell_ids)
         except Exception as error:
             print("ERROR creating csv", error)
             return make_payload([], "Error: creating csv download", 400)
