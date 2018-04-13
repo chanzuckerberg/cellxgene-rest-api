@@ -112,12 +112,16 @@ class EndPoints(unittest.TestCase):
             ["Selection=Unpanned", "ERCC_reads=150000,200000"]))
         result = self.session.get(url)
         assert result.status_code == 200
+        assert result.headers['Content-Type'].startswith("text/csv")
+        assert len(result.text) > 0
 
     def test_metadatadownload(self):
         url = "{base}{endpoint}?{params}".format(base=self.url_base, endpoint="metadatadownload", params="&".join(
             ["Selection=Unpanned", "ERCC_reads=150000,200000"]))
         result = self.session.get(url)
         assert result.status_code == 200
+        assert result.headers['Content-Type'].startswith("text/csv")
+        assert len(result.text) > 0
 
     def test_cells_failure(self):
         url = "{base}{endpoint}?{params}".format(base=self.url_base, endpoint="cells", params="&".join(
