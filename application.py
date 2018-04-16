@@ -10,6 +10,7 @@ from flask_restful_swagger_2 import Api, swagger, Resource
 from flask_cors import CORS
 from flask_compress import Compress
 from flask_cache import Cache
+from werkzeug.datastructures import Headers
 import pybrake.flask
 import numpy as np
 from scipy import stats
@@ -374,6 +375,63 @@ def make_payload(data, errormessage="", errorcode=200):
     }), errorcode)
 
 
+def expression_matrix_csv(output_cellset, filename="cxg_expression_matrix.csv"):
+    """
+    Creates csv download for a cellset
+    :param output_cellset: name of cellset with data
+    :return: Flask response containing csv of expression matrix
+    """
+    global e
+    expression = e.getDenseExpressionMatrix("AllGenes", output_cellset)
+    expression = expression.transpose()
+    genes = all_genes()
+    cellids = e.getCellSet(output_cellset)
+
+    def generate_expression_matrix_csv(expression, genes, cellids):
+        first_row = [""] + [get_cell_name(cid) for cid in cellids]
+        yield ",".join(first_row) + "\n"
+        for idx, row in enumerate(expression):
+            line = [genes[idx]] + row.tolist()
+            yield ",".join(str(e) for e in line) + "\n"
+
+    headers = Headers()
+    headers.add("Content-Disposition", "attachment; filename={}".format(filename))
+    return Response(generate_expression_matrix_csv(expression, genes, cellids), headers=headers, mimetype='text/csv')
+
+
+def metadata_csv(cell_ids, filename="cxg_metadata.csv"):
+    """
+    Creates csv download for a cellset
+    :param output_cellset: name of cellset with data
+    :return: Flask response containing csv of expression matrix
+    """
+    global e
+    metadata = parse_metadata(cell_ids)
+
+    def metadata2table(metadata):
+        """
+        Generator to turn results of parse_metadata to a table of metadata values with rows being cells
+        and columns being metadata fields
+        :param metadata: metadata from cell set produced by parse_metadata
+        :return: 2d list of metadata values with header
+        """
+        if not len(metadata):
+            return
+        header = list(metadata[0].keys())
+        header.sort()
+        # put cell name in front
+        header.remove("CellName")
+        header = ["CellName"] + header
+        yield ",".join(header) + "\n"
+        for cell in metadata:
+            row = [cell.get(mkey, "") for mkey in header]
+            yield ",".join(row) + "\n"
+
+    headers = Headers()
+    headers.add("Content-Disposition", "attachment; filename={}".format(filename))
+    return Response(metadata2table(metadata), headers=headers, mimetype='text/csv')
+
+
 def parse_querystring(qs):
     """
     Parses filter query and transforms to json
@@ -469,6 +527,19 @@ def cells_from_query(qs, output_cellset):
     :return: list of cell ids
     """
     global e
+    cellset_from_query(qs, output_cellset)
+    cellidlist = e.getCellSet(output_cellset)
+    return cellidlist
+
+
+def cellset_from_query(qs, output_cellset):
+    """
+    Creates a cell set matching user's filter. **Important** must delete cellset when done
+    :param qs: dictionary, query string from user
+    :param output_cellset: string, name for cellset
+    :return: output cellset name
+    """
+    global e
     filters = []
     for key, value in qs.items():
         if value["variabletype"] == 'categorical':
@@ -505,10 +576,9 @@ def cells_from_query(qs, output_cellset):
             else:
                 filters.pop(filters.index(filtername))
     e.createCellSetIntersection(",".join(filters), output_cellset)
-    cellidlist = e.getCellSet(output_cellset)
     for cellset in filters:
         e.removeCellSet(cellset)
-    return cellidlist
+    return output_cellset
 
 
 @cache.memoize(86400000)
@@ -1308,6 +1378,90 @@ class CellsAPI(Resource):
         return make_payload(data)
 
 
+class EgressAPI(Resource):
+    @swagger.doc({
+        'summary': 'Download expression data for filter based on metadata filter',
+        'tags': ['download'],
+        'description': "Cells takes query parameters defined in the schema retrieved from the /initialize enpoint. "
+                       "<br>For categorical metadata keys filter based on `key=value` <br>"
+                       " For continuous metadata keys filter by `key=min,max`<br> Either value "
+                       "can be replaced by a \*. To have only a minimum value `key=min,\*`  To have only a maximum "
+                       "value `key=\*,max` <br>Graph data (if retrieved) is normalized"
+                       " To only retrieve cells that don't have a value for the key filter by `key`",
+        'responses': {
+            '200': {
+                'description': 'csv of cell by gene expression counts',
+            },
+
+            '400': {
+                'description': 'bad query params or bad download',
+            }
+        }
+    })
+    def get(self):
+        global e
+        e = ExpressionMatrix(application.config["DATA_DIR"], True)
+        try:
+            qs = parse_querystring(request.args)
+        except QueryStringError as error:
+            return make_payload({}, str(error), 400)
+        output_cellset = "outcellset_{}".format(request.query_string)
+        if not len(qs):
+            output_cellset = "AllCells"
+        try:
+            # create cellset
+            cellset_from_query(qs, output_cellset)
+            return expression_matrix_csv(output_cellset)
+        except Exception as error:
+            print("ERROR creating csv", error)
+            return make_payload([], "Error: creating csv download", 400)
+        finally:
+            if output_cellset != "AllCells":
+                e.removeCellSet(output_cellset)
+
+
+class MetadataEgressAPI(Resource):
+    @swagger.doc({
+        'summary': 'Download metadata for filter based on metadata filter',
+        'tags': ['download'],
+        'description': "Cells takes query parameters defined in the schema retrieved from the /initialize enpoint. "
+                       "<br>For categorical metadata keys filter based on `key=value` <br>"
+                       " For continuous metadata keys filter by `key=min,max`<br> Either value "
+                       "can be replaced by a \*. To have only a minimum value `key=min,\*`  To have only a maximum "
+                       "value `key=\*,max` <br>Graph data (if retrieved) is normalized"
+                       " To only retrieve cells that don't have a value for the key filter by `key`",
+        'responses': {
+            '200': {
+                'description': 'csv of metadata for cells',
+            },
+
+            '400': {
+                'description': 'bad query params or bad download',
+            }
+        }
+    })
+    def get(self):
+        global e
+        e = ExpressionMatrix(application.config["DATA_DIR"], True)
+        try:
+            qs = parse_querystring(request.args)
+        except QueryStringError as error:
+            return make_payload({}, str(error), 400)
+        output_cellset = "outcellset_{}".format(request.query_string)
+        if not len(qs):
+            output_cellset = "AllCells"
+        try:
+            # create cellset
+            cell_ids = cells_from_query(qs, output_cellset)
+            return metadata_csv(cell_ids)
+        except Exception as error:
+            print("ERROR creating csv", error)
+            return make_payload([], "Error: creating csv download", 400)
+        finally:
+            if output_cellset != "AllCells":
+                e.removeCellSet(output_cellset)
+
+
 class InitializeAPI(Resource):
     @swagger.doc({
         'summary': 'get metadata schema, ranges for values, and cell count to initialize cellxgene app',
@@ -1406,6 +1560,8 @@ api.add_resource(ExpressionAPI, "/api/v0.1/expression")
 api.add_resource(InitializeAPI, "/api/v0.1/initialize")
 api.add_resource(CellsAPI, "/api/v0.1/cells")
 api.add_resource(DifferentialExpressionAPI, "/api/v0.1/diffexpression")
+api.add_resource(EgressAPI, "/api/v0.1/download")
+api.add_resource(MetadataEgressAPI, "/api/v0.1/metadatadownload")
 
 if __name__ == "__main__":
     application.run(host='0.0.0.0', debug=True)
