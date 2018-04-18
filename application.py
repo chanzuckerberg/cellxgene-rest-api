@@ -1,5 +1,7 @@
 import os
 import time
+import csv
+from io import StringIO
 from collections import defaultdict
 from functools import wraps
 from ExpressionMatrix2 import ExpressionMatrix  # noqa: E402
@@ -388,11 +390,17 @@ def expression_matrix_csv(output_cellset, filename="cxg_expression_matrix.csv"):
     cellids = e.getCellSet(output_cellset)
 
     def generate_expression_matrix_csv(expression, genes, cellids):
+        s = StringIO()
+        writer = csv.writer(s)
         first_row = [""] + [get_cell_name(cid) for cid in cellids]
-        yield ",".join(first_row) + "\n"
+        writer.writerow(first_row)
+        yield s.getvalue()
         for idx, row in enumerate(expression):
+            s.truncate(0)
+            s.seek(0)
             line = [genes[idx]] + row.tolist()
-            yield ",".join(str(e) for e in line) + "\n"
+            writer.writerow(line)
+            yield s.getvalue()
 
     headers = Headers()
     headers.add("Content-Disposition", "attachment; filename={}".format(filename))
@@ -415,6 +423,8 @@ def metadata_csv(cell_ids, filename="cxg_metadata.csv"):
         :param metadata: metadata from cell set produced by parse_metadata
         :return: 2d list of metadata values with header
         """
+        s = StringIO()
+        writer = csv.writer(s)
         if not len(metadata):
             return
         header = list(metadata[0].keys())
@@ -422,11 +432,14 @@ def metadata_csv(cell_ids, filename="cxg_metadata.csv"):
         # put cell name in front
         header.remove("CellName")
         header = ["CellName"] + header
-        yield ",".join(header) + "\n"
+        writer.writerow(header)
+        yield s.getvalue()
         for cell in metadata:
+            s.truncate(0)
+            s.seek(0)
             row = [cell.get(mkey, "") for mkey in header]
-            yield ",".join(row) + "\n"
-
+            writer.writerow(row)
+            yield s.getvalue()
     headers = Headers()
     headers.add("Content-Disposition", "attachment; filename={}".format(filename))
     return Response(metadata2table(metadata), headers=headers, mimetype='text/csv')
