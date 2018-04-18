@@ -425,6 +425,7 @@ def metadata_csv(cell_ids, filename="cxg_metadata.csv"):
         """
         s = StringIO()
         writer = csv.writer(s)
+
         if not len(metadata):
             return
         header = list(metadata[0].keys())
