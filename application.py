@@ -23,6 +23,9 @@ from schemaparse import parse_schema
 # CONSTANTS
 REACTIVE_LIMIT = 100000
 INVALID_CELL_ID = 4294967295
+SCHEMA_FILE = "data_schema.json"
+CLUSTER_METADATA_KEY = "EM2Cluster"
+HIGH_INFO_NAME = "LshHighInformationGenes"
 
 
 # Local Errors
@@ -70,7 +73,7 @@ application = pybrake.flask.init_app(application)
 if not CONFIG_FILE:
     raise ValueError("No config file set for Flask application")
 # CONFIG
-application.config.from_pyfile(CONFIG_FILE, silent=True)
+application.config.from_pyfile(os.path.join("config", CONFIG_FILE), silent=True)
 application.config.update(
     SECRET_KEY=SECRET_KEY,
     USERNAME=APP_USERNAME,
@@ -162,7 +165,7 @@ differential_parser.add_argument('pval', type=float, required=False, default=0.0
                                  help="Pval max of diff-expressed genes")
 
 e = ExpressionMatrix(application.config["DATA_DIR"], True)
-schema = parse_schema(os.path.join(application.config["DATA_DIR"], application.config["SCHEMA_FILE"]))
+schema = parse_schema(os.path.join(application.config["DATA_DIR"], SCHEMA_FILE))
 
 
 # ---- Helper Functions -------
@@ -621,7 +624,7 @@ def create_graph_em2(output_cellset, includeisolated=False, graphname="cellgraph
     :param graphname: string, name to save EM2 graph
     :return: list of tuples [(label, x, y), ...], list of kept cellids
     """
-    e.createCellGraph(graphname, output_cellset, application.config["HIGH_INFO_NAME"],
+    e.createCellGraph(graphname, output_cellset, HIGH_INFO_NAME,
                       keepIsolatedVertices=includeisolated)
     e.computeCellGraphLayout(graphname)
     vertices = e.getCellGraphVertices(graphname)
@@ -765,7 +768,7 @@ def get_clusters(list_of_clusters):
     cluster_filter = "|".join(list_of_clusters)
     cellset_name = "cluster_set_{}".format(cluster_filter)
     cluster_filter = "^({})$".format(cluster_filter)
-    e.createCellSetUsingMetaData(cellset_name, application.config["CLUSTER_METADATA_KEY"], cluster_filter, True)
+    e.createCellSetUsingMetaData(cellset_name, CLUSTER_METADATA_KEY, cluster_filter, True)
     cellids = e.getCellSet(cellset_name)
     e.removeCellSet(cellset_name)
     return [get_cell_name(i) for i in cellids]
