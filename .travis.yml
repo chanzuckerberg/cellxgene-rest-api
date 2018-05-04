@@ -59,3 +59,8 @@ deploy:
   - ecs deploy --profile czi-legacy stp-staging cxg-rest-api-pbmc3k-staging --timeout 10000 --tag sha-${TRAVIS_COMMIT::8}
   on:
     branch: hinxton
+- provider: script
+  script:
+  - ecs deploy --profile czi-legacy stp-staging stp-staging-cxg-rest-api-biopsy --timeout 10000 --tag sha-${TRAVIS_COMMIT::8}
+  on:
+    branch: biopsy
