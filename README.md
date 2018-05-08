@@ -2,6 +2,8 @@
 
 Rest API layer for cellxgene project
 
+Please direct all feature requests and bug reports to the cellxgene repo: https://github.com/chanzuckerberg/cellxgene/issues
+
 Work in progress.
 
 
