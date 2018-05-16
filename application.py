@@ -21,7 +21,7 @@ import boto3
 from schemaparse import parse_schema
 
 # CONSTANTS
-REACTIVE_LIMIT = 100000
+REACTIVE_LIMIT = 1000000
 INVALID_CELL_ID = 4294967295
 SCHEMA_FILE = "data_schema.json"
 CLUSTER_METADATA_KEY = "EM2Cluster"
@@ -35,16 +35,20 @@ class QueryStringError(Exception):
 
 class Vertex:
 
-    def __init__(self, cellId, x, y):
+    def __init__(self, cellId, x, y, z=None):
         self.cellId = cellId
         self.x_coord = x
         self.y_coord = y
+        self.z_coord = z
 
     def x(self):
         return float(self.x_coord)
 
     def y(self):
         return float(self.y_coord)
+
+    def z(self):
+        return float(self.z_coord)
 
 
 application = Flask(__name__, static_url_path='/templates')
@@ -612,7 +616,7 @@ def create_graph(output_cellset, includeisolated=False, graphname="cellgraph"):
     if application.config["GRAPH_EM2"]:
         graph, cellidlist = create_graph_em2(output_cellset, includeisolated=False, graphname="cellgraph")
     else:
-        graph, cellidlist = create_graph_tsne(output_cellset)
+        graph, cellidlist = create_graph_umap(output_cellset)
     return graph, cellidlist
 
 
@@ -656,6 +660,22 @@ def create_graph_tsne(output_cellset):
                       normalized_verticies["y"][i]))
     return graph, cellidlist
 
+def create_graph_umap(output_cellset):
+    """
+    Layout for given cellset usig precomputed coordinates
+    :param output_cellset: string, name of EM2 cellset
+    :return: list of tuples [(label, x, y), ...], list of kept cellids
+    """
+    # get metadata for each cell
+    cellidlist = e.getCellSet(output_cellset)
+    vertices = [Vertex(get_cell_name(cid), e.getCellMetaDataValue(cid, "umap_coord1"),
+                       e.getCellMetaDataValue(cid, "umap_coord2"), e.getCellMetaDataValue(cid, "umap_coord3")) for cid in cellidlist]
+    normalized_verticies = normalize_verticies(vertices)
+    graph = []
+    for i in range(len(normalized_verticies["labels"])):
+        graph.append((normalized_verticies["labels"][i], normalized_verticies["x"][i],
+                      normalized_verticies["y"][i]))
+    return graph, cellidlist
 
 def normalize_verticies(verticies):
     """
