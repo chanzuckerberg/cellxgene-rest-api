@@ -73,7 +73,11 @@ application = pybrake.flask.init_app(application)
 if not CONFIG_FILE:
     raise ValueError("No config file set for Flask application")
 # CONFIG
-application.config.from_pyfile(os.path.join("config", CONFIG_FILE), silent=True)
+config_file_loc = os.path.join("config", CONFIG_FILE)
+if not os.path.isfile(config_file_loc):
+    print(os.listdir('config'))
+    raise ValueError("No config file available: {}".format(config_file_loc))
+application.config.from_pyfile(os.path.join("config", CONFIG_FILE))
 application.config.update(
     SECRET_KEY=SECRET_KEY,
     USERNAME=APP_USERNAME,
