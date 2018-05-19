@@ -668,6 +668,7 @@ def create_graph_tsne(output_cellset):
                       normalized_verticies["y"][i]))
     return graph, cellidlist
 
+
 def create_graph_umap(output_cellset):
     """
     Layout for given cellset usig precomputed coordinates
@@ -676,14 +677,17 @@ def create_graph_umap(output_cellset):
     """
     # get metadata for each cell
     cellidlist = e.getCellSet(output_cellset)
-    vertices = [Vertex(get_cell_name(cid), e.getCellMetaDataValue(cid, "umap_coord1"),
-                       e.getCellMetaDataValue(cid, "umap_coord2"), e.getCellMetaDataValue(cid, "umap_coord3")) for cid in cellidlist]
+    vertices = [Vertex(get_cell_name(cid),
+                       e.getCellMetaDataValue(cid, "umap_coord1"),
+                       e.getCellMetaDataValue(cid, "umap_coord2"),
+                       e.getCellMetaDataValue(cid, "umap_coord3")) for cid in cellidlist]
     normalized_verticies = normalize_verticies(vertices)
     graph = []
     for i in range(len(normalized_verticies["labels"])):
         graph.append((normalized_verticies["labels"][i], normalized_verticies["x"][i],
                       normalized_verticies["y"][i]))
     return graph, cellidlist
+
 
 def normalize_verticies(verticies):
     """
