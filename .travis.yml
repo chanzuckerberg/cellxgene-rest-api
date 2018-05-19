@@ -64,3 +64,13 @@ deploy:
   - ecs deploy --profile czi-legacy stp-staging stp-staging-cxg-rest-api-biopsy --timeout 10000 --tag sha-${TRAVIS_COMMIT::8}
   on:
     branch: biopsy
+- provider: script
+  script:
+  - ecs deploy --profile czi-legacy stp-staging stp-staging-cxg-rest-api-kidney --timeout 10000 --tag sha-${TRAVIS_COMMIT::8}
+  on:
+    branch: humankidney
+- provider: script
+  script:
+  - ecs deploy --profile czi-legacy stp-staging stp-staging-cxg-rest-api-hopkins --timeout 10000 --tag sha-${TRAVIS_COMMIT::8}
+  on:
+    branch: mouseretina
