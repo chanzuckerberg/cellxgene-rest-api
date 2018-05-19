@@ -21,7 +21,7 @@ import boto3
 from schemaparse import parse_schema
 
 # CONSTANTS
-REACTIVE_LIMIT = 1000000
+REACTIVE_LIMIT = 100000
 INVALID_CELL_ID = 4294967295
 SCHEMA_FILE = "data_schema.json"
 CLUSTER_METADATA_KEY = "EM2Cluster"
@@ -617,10 +617,14 @@ def create_graph(output_cellset, includeisolated=False, graphname="cellgraph"):
     """
     global e
     # Graph using EM2 or use metadata coordinates
-    if application.config["GRAPH_EM2"]:
+    if application.config["GRAPH_METHOD"] == "em2":
         graph, cellidlist = create_graph_em2(output_cellset, includeisolated=False, graphname="cellgraph")
-    else:
+    elif application.config["GRAPH_METHOD"] == "umap":
         graph, cellidlist = create_graph_umap(output_cellset)
+    elif application.config["GRAPH_METHOD"] == "tsne":
+        graph, cellidlist = create_graph_tsne(output_cellset)
+    else:
+        raise ValueError("Invalid graph method :{}".format(application.config["GRAPH_METHOD"]))
     return graph, cellidlist
 
 
