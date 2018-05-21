@@ -640,7 +640,7 @@ def create_graph_em2(output_cellset, includeisolated=False, graphname="cellgraph
                       keepIsolatedVertices=includeisolated)
     e.computeCellGraphLayout(graphname)
     vertices = e.getCellGraphVertices(graphname)
-    normalized_verticies = normalize_verticies(vertices)
+    normalized_verticies = normalize_vertices(vertices)
     graph = []
     # reset cellids if create the graph
     cellidlist = []
@@ -661,11 +661,11 @@ def create_graph_tsne(output_cellset):
     cellidlist = e.getCellSet(output_cellset)
     vertices = [Vertex(get_cell_name(cid), e.getCellMetaDataValue(cid, "tSNE_1"),
                        e.getCellMetaDataValue(cid, "tSNE_2")) for cid in cellidlist]
-    normalized_verticies = normalize_verticies(vertices)
-    graph = []
-    for i in range(len(normalized_verticies["labels"])):
-        graph.append((normalized_verticies["labels"][i], normalized_verticies["x"][i],
-                      normalized_verticies["y"][i]))
+    normalized_vertices = normalize_vertices(vertices)
+    graph = [
+        (label, x, y)
+        for label, x, y in zip(normalized_vertices['labels'], normalized_vertices['x'], normalized_vertices['y'])
+    ]
     return graph, cellidlist
 
 
@@ -681,25 +681,25 @@ def create_graph_umap(output_cellset):
                        e.getCellMetaDataValue(cid, "umap_coord1"),
                        e.getCellMetaDataValue(cid, "umap_coord2"),
                        e.getCellMetaDataValue(cid, "umap_coord3")) for cid in cellidlist]
-    normalized_verticies = normalize_verticies(vertices)
-    graph = []
-    for i in range(len(normalized_verticies["labels"])):
-        graph.append((normalized_verticies["labels"][i], normalized_verticies["x"][i],
-                      normalized_verticies["y"][i]))
+    normalized_vertices = normalize_vertices(vertices)
+    graph = [
+        (label, x, y)
+        for label, x, y in zip(normalized_vertices['labels'], normalized_vertices['x'], normalized_vertices['y'])
+    ]
     return graph, cellidlist
 
 
-def normalize_verticies(verticies):
+def normalize_vertices(vertices):
     """
     normalize x,y verticies for graph
-    :param verticies: list of vertex objects
+    :param vertices: list of vertex objects
     :return: json: {"labels": list of point labels, "x":
         list of normalized x positions, "y": list of normalized y positions}
     """
     labels = []
     x = []
     y = []
-    for v in verticies:
+    for v in vertices:
         labels.append(v.cellId)
         x.append(v.x())
         y.append(v.y())
