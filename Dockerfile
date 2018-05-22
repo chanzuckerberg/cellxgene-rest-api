@@ -30,4 +30,4 @@ RUN chmod +x /bin/chamber
 
 ENV AWS_SDK_LOAD_CONFIG=1
 
-CMD chamber exec stp-$ENV-cellxgene -- python3 application.py
+CMD chamber exec stp-$ENV-cellxgene -- chamber exec stp-$ENV-$SERVICE -- python3 application.py
