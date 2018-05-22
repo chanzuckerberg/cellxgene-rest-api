@@ -872,6 +872,12 @@ def index():
     return render_template("index.html", prefix=url_base, datasetTitle=dataset_title)
 
 
+# Health check endpoint
+@application.route('/health')
+def health():
+    return "OK"
+
+
 # renders swagger documentation
 @application.route('/swagger')
 @requires_auth
