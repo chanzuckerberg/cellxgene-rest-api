@@ -2,8 +2,7 @@ FROM csweaver/cellxgene
 
 # Env vars expected when running containers from this image:
 # * ENV - staging, etc.
-# * CXG_API_BASE
-# * CONFIG_FILE
+# * SERVICE
 
 # It also needs to be able to authenticate to AWS. In ECS this will come in the form of a
 # task profile. When running elsewhere you should pass in some credentials via environment
@@ -25,9 +24,9 @@ EXPOSE 5000:5000
 
 # Install chamber, for pulling secrets into the container.
 # Needs a `secret_key` setting.
-ADD https://github.com/segmentio/chamber/releases/download/v1.16.0/chamber-v1.16.0-linux-amd64 /bin/chamber
+ADD https://github.com/segmentio/chamber/releases/download/v2.1.0/chamber-v2.1.0-linux-amd64 /bin/chamber
 RUN chmod +x /bin/chamber
 
 ENV AWS_SDK_LOAD_CONFIG=1
 
-CMD chamber exec stp-$ENV-cellxgene -- chamber exec stp-$ENV-$SERVICE -- python3 application.py
+CMD chamber exec stp-$ENV-cellxgene stp-$ENV-$SERVICE -- python3 application.py
