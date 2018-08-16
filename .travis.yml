@@ -11,11 +11,9 @@ addons:
     - gettext
     - curl
     - httpie
-before_install:
-  - echo
 install:
 - set -eo pipefail
-- pip install nose requests ecs-deploy flake8 awscli
+- pip install nose requests flake8 awscli
 - curl -o $HOME/bin/docker-helper https://raw.githubusercontent.com/chanzuckerberg/infra-tools/6402865/docker-helper
 - chmod +x $HOME/bin/docker-helper
 before_script:
@@ -43,34 +41,31 @@ after_success:
 - set -eo pipefail
 - bash <(curl -s https://codecov.io/bash)
 - docker-helper push chanzuckerberg/cellxgene-rest-api
+before_deploy:
+- curl -L https://github.com/chanzuckerberg/czecs/releases/download/v0.0.1/czecs_0.0.1_linux_amd64.tar.gz | tar xz -C $HOME/bin czecs
 deploy:
 - provider: script
-  script:
-  - ecs deploy --profile czi-legacy stp-staging stp-staging-cellxgene-rest-api --timeout 10000 --tag sha-${TRAVIS_COMMIT::8}
+  script: AWS_PROFILE=czi-legacy czecs upgrade --balances balances.json --set tag=sha-${TRAVIS_COMMIT::8} --set name=cellxgene-rest-api stp-staging stp-staging-cellxgene-rest-api czecs.json
   on:
     branch: master
 - provider: script
-  script:
-  - ecs deploy --profile czi-legacy stp-staging stp-staging-cxg-rest-api-mouse --timeout 10000 --tag sha-${TRAVIS_COMMIT::8}
+  script: AWS_PROFILE=czi-legacy czecs upgrade --balances balances.json --set tag=sha-${TRAVIS_COMMIT::8} --set name=cxg-rest-api-mouse stp-staging stp-staging-cxg-rest-api-mouse czecs.json
   on:
     branch: production
 - provider: script
-  script:
-  - ecs deploy --profile czi-legacy stp-staging cxg-rest-api-pbmc3k-staging --timeout 10000 --tag sha-${TRAVIS_COMMIT::8}
+  script: AWS_PROFILE=czi-legacy czecs upgrade --balances balances.json --set tag=sha-${TRAVIS_COMMIT::8} --set name=cxg-rest-api-pbmc3k stp-staging stp-staging-cxg-rest-api-pbmc3k czecs.json
   on:
     branch: hinxton
 - provider: script
-  script:
-  - ecs deploy --profile czi-legacy stp-staging stp-staging-cxg-rest-api-biopsy --timeout 10000 --tag sha-${TRAVIS_COMMIT::8}
+  script: AWS_PROFILE=czi-legacy czecs upgrade --balances balances.json --set tag=sha-${TRAVIS_COMMIT::8} --set name=cxg-rest-api-biopsy stp-staging stp-staging-cxg-rest-api-biopsy czecs.json
   on:
     branch: biopsy
 - provider: script
-  script:
-  - ecs deploy --profile czi-legacy stp-staging stp-staging-cxg-rest-api-kidney --timeout 10000 --tag sha-${TRAVIS_COMMIT::8}
+  script: AWS_PROFILE=czi-legacy czecs upgrade --balances balances.json --set tag=sha-${TRAVIS_COMMIT::8} --set name=cxg-rest-api-kidney stp-staging stp-staging-cxg-rest-api-kidney czecs.json
   on:
     branch: humankidney
+# TODO(mbarrien): hopkins? pbmc33k?
 - provider: script
-  script:
-  - ecs deploy --profile czi-legacy stp-staging stp-staging-cxg-rest-api-hopkins --timeout 10000 --tag sha-${TRAVIS_COMMIT::8}
+  script: AWS_PROFILE=czi-legacy czecs upgrade --balances balances.json --set tag=sha-${TRAVIS_COMMIT::8} --set name=cxg-rest-api-hopkins stp-staging stp-staging-cxg-rest-api-hopkins czecs.json
   on:
     branch: mouseretina

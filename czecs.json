@@ -1,0 +1,33 @@
+{
+  "Family": "{{ .Values.project }}-{{ .Values.env }}-{{ .Values.name }}",
+  "ContainerDefinitions": [
+    {
+      "name": "cellxgene-rest-api",
+      "image": "chanzuckerberg/cellxgene-rest-api:{{ .Values.tag }}",
+      "cpu": 1024,
+      "memoryReservation": 4096,
+      "essential": true,
+      "portMappings": [
+        {
+          "containerPort": 5000,
+          "hostPort": 0
+        }
+      ],
+      "environment": [
+        { "name": "AWS_REGION",           "value": "{{ .Values.region }}" },
+        { "name": "AWS_DEFAULT_REGION",   "value": "{{ .Values.region }}" },
+        { "name": "ENV",                  "value": "{{ .Values.env }}" },
+        { "name": "SERVICE",              "value": "{{ .Values.name }}"}
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "stp-ecs-logs-{{ .Values.env }}",
+          "awslogs-region": "{{ .Values.region }}",
+          "awslogs-stream-prefix": "cellxgene-rest-api"
+        }
+      }
+    }
+  ],
+  "TaskRoleArn": "{{ .Values.project }}-{{ .Values.env }}-{{ .Values.name }}"
+}
