@@ -22,7 +22,7 @@
       "logConfiguration": {
         "logDriver": "awslogs",
         "options": {
-          "awslogs-group": "stp-ecs-logs-{{ .Values.env }}",
+          "awslogs-group": "stp-{{ .Values.env }}-ecs",
           "awslogs-region": "{{ .Values.region }}",
           "awslogs-stream-prefix": "cellxgene-rest-api"
         }
