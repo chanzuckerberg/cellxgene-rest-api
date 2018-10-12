@@ -1,16 +1,19 @@
 {
   "Family": "{{ .Values.project }}-{{ .Values.env }}-{{ .Values.name }}",
+  "Cpu": "1024",
+  "Memory": "4096",
   "ContainerDefinitions": [
     {
       "name": "cellxgene-rest-api",
       "image": "chanzuckerberg/cellxgene-rest-api:{{ .Values.tag }}",
-      "cpu": 1024,
-      "memoryReservation": 4096,
+      "repositoryCredentials": {
+        "credentialsParameter": "{{ .Values.repo_credentials }}"
+      },
       "essential": true,
       "portMappings": [
         {
           "containerPort": 5000,
-          "hostPort": 0
+          "hostPort": 5000
         }
       ],
       "environment": [
@@ -22,12 +25,17 @@
       "logConfiguration": {
         "logDriver": "awslogs",
         "options": {
-          "awslogs-group": "stp-{{ .Values.env }}-ecs",
+          "awslogs-group": "{{ .Values.project }}-{{ .Values.env }}-ecs",
           "awslogs-region": "{{ .Values.region }}",
           "awslogs-stream-prefix": "cellxgene-rest-api"
         }
       }
     }
   ],
-  "TaskRoleArn": "{{ .Values.project }}-{{ .Values.env }}-{{ .Values.name }}"
+  "TaskRoleArn": "{{ .Values.project }}-{{ .Values.env }}-{{ .Values.name }}",
+  "ExecutionRoleArn": "{{ .Values.project }}-{{ .Values.env }}-{{ .Values.name }}-execution-role",
+  "RequiresCompatibilities": [
+    "FARGATE"
+  ],
+  "NetworkMode": "awsvpc"
 }
