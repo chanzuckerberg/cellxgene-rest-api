@@ -1283,8 +1283,8 @@ class CellsAPI(Resource):
         'description': "Cells takes query parameters defined in the schema retrieved from the /initialize enpoint. "
                        "<br>For categorical metadata keys filter based on `key=value` <br>"
                        " For continuous metadata keys filter by `key=min,max`<br> Either value "
-                       "can be replaced by a \*. To have only a minimum value `key=min,\*`  To have only a maximum "
-                       "value `key=\*,max` <br>Graph data (if retrieved) is normalized"
+                       r"can be replaced by a \*. To have only a minimum value `key=min,\*`  To have only a maximum "
+                       r"value `key=\*,max` <br>Graph data (if retrieved) is normalized"
                        " To only retrieve cells that don't have a value for the key filter by `key`",
         'parameters': [
             {
@@ -1440,8 +1440,8 @@ class EgressAPI(Resource):
         'description': "Cells takes query parameters defined in the schema retrieved from the /initialize enpoint. "
                        "<br>For categorical metadata keys filter based on `key=value` <br>"
                        " For continuous metadata keys filter by `key=min,max`<br> Either value "
-                       "can be replaced by a \*. To have only a minimum value `key=min,\*`  To have only a maximum "
-                       "value `key=\*,max` <br>Graph data (if retrieved) is normalized"
+                       r"can be replaced by a \*. To have only a minimum value `key=min,\*`  To have only a maximum "
+                       r"value `key=\*,max` <br>Graph data (if retrieved) is normalized"
                        " To only retrieve cells that don't have a value for the key filter by `key`",
         'responses': {
             '200': {
@@ -1482,8 +1482,8 @@ class MetadataEgressAPI(Resource):
         'description': "Cells takes query parameters defined in the schema retrieved from the /initialize enpoint. "
                        "<br>For categorical metadata keys filter based on `key=value` <br>"
                        " For continuous metadata keys filter by `key=min,max`<br> Either value "
-                       "can be replaced by a \*. To have only a minimum value `key=min,\*`  To have only a maximum "
-                       "value `key=\*,max` <br>Graph data (if retrieved) is normalized"
+                       r"can be replaced by a \*. To have only a minimum value `key=min,\*`  To have only a maximum "
+                       r"value `key=\*,max` <br>Graph data (if retrieved) is normalized"
                        " To only retrieve cells that don't have a value for the key filter by `key`",
         'responses': {
             '200': {
