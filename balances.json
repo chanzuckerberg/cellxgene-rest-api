@@ -2,6 +2,7 @@
   "region": "us-east-1",
   "project": "stp",
   "env": "staging",
-  "tag": "branch-master"
+  "tag": "branch-master",
+  "repo_credentials": "arn:aws:secretsmanager:us-east-1:787588439240:secret:stp-staging-credentials/dockerhub-cellxgeneci-MbiE66"
 }
 
